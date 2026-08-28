@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <!-- 响应式必备：视口宽度 = 设备宽度，初始缩放 1 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="PaperClip · Minecraft" />
+  <title>PaperClip | Minecraft</title>
+  <!-- 网站图标：浏览器标签页显示 -->
+  <link rel="icon" type="image/jpeg" href="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" />
+  <!-- 主题预载脚本：页面渲染前根据 localStorage / 系统偏好设置主题，避免刷新时闪色 -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem("theme");
+      var theme = (saved === "light" || saved === "dark")
+        ? saved
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      if (theme === "light") document.documentElement.classList.add("light");
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ==================== 顶部导航栏（全部页面共用结构） ==================== -->
+  <header class="site-header">
+    <nav class="nav container">
+      <!-- Logo：头像缩略图 + 名字 -->
+      <a href="index.html" class="nav-logo">
+        <img class="logo-dot" src="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" alt="PaperClip的头像" />PaperClip
+      </a>
+
+      <!-- 右侧功能区：导航链接 + 主题切换 + 汉堡按钮 -->
+      <div class="nav-right">
+        <!-- 导航链接：当前页加 .active 高亮 -->
+        <ul class="nav-links">
+          <li><a class="nav-link" href="index.html">首页</a></li>
+          <li><a class="nav-link active" href="minecraft.html">Minecraft</a></li>
+          <li><a class="nav-link" href="contact.html">联系我</a></li>
+        </ul>
+
+        <!-- 深浅色模式切换按钮（图标由 main.js 根据当前主题更新） -->
+        <button class="theme-toggle" id="theme-toggle" aria-label="切换深浅色模式" title="切换深浅色模式">🌞</button>
+
+        <!-- 汉堡按钮：仅手机端显示，控制下方菜单展开/收起 -->
+        <button class="nav-toggle" aria-label="切换导航菜单">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ==================== 主体内容 ==================== -->
+  <main>
+    <section class="container">
+      <div class="page-head">
+        <h1>Minecraft</h1>
+        <p>服务器介绍</p>
+      </div>
+
+      <!-- 服务器状态卡片 -->
+      <div class="mc-card" id="mc-result">
+        <!-- 加载中占位（页面打开即显示，查询完成后隐藏） -->
+        <div class="mc-loading" id="mc-loading">
+          <span class="mc-spinner"></span>加载中…
+        </div>
+
+        <!-- 错误提示 -->
+        <div class="mc-error" id="mc-error" hidden></div>
+
+        <!-- 结果展示 -->
+        <div class="mc-info" id="mc-info" hidden>
+          <div class="mc-head">
+            <img id="mc-favicon" class="mc-favicon" src="" alt="服务器图标" />
+            <div>
+              <h3 id="mc-host" class="mc-host"></h3>
+              <span id="mc-status" class="mc-online"></span>
+            </div>
+          </div>
+
+          <!-- MOTD：直接渲染 API 返回的带颜色 HTML -->
+          <div id="mc-motd" class="mc-motd"></div>
+
+          <!-- 详细数据 -->
+          <ul class="mc-stats">
+            <li><span>版本</span><b id="mc-version"></b></li>
+            <li><span>在线玩家</span><b id="mc-players"></b></li>
+            <li><span>最大玩家</span><b id="mc-max"></b></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 加入QQ群区域 -->
+      <div class="mc-qq-group">
+        <div class="mc-qq-info">
+          <span class="mc-qq-icon">💬</span>
+          <div>
+            <h3>加入QQ群</h3>
+            <p>群号：1046086485 · 点击加入服务器交流群</p>
+          </div>
+        </div>
+        <a class="mc-qq-btn" href="https://qun.qq.com/universal-share/share?ac=1&svctype=5&tempid=h5_group_info&busi_data=eyJncm91cENvZGUiOiIxMDQ2MDg2NDg1In0%3D" target="_blank" rel="noopener">一键加群</a>
+      </div>
+
+      <!-- 独立跳转按钮：位于服务器信息卡片下方，两个按钮并排 -->
+      <div class="mc-action" id="mc-action">
+        <!-- 下载按钮：带下拉菜单，选择版本后跳转 -->
+        <div class="mc-dropdown" id="mc-dropdown">
+          <button class="mc-join-btn mc-dropdown-toggle" id="mc-download-btn" type="button">下载服务器客户端整合包 ▾</button>
+          <ul class="mc-dropdown-menu" id="mc-dropdown-menu">
+            <li><a href="#" data-version="原版">客户端懒人包</a></li>
+            <li><a href="#" data-version="整合包">整合包文件</a></li>
+          </ul>
+        </div>
+        <a id="mc-copy-ip-btn" class="mc-join-btn" href="http://xm.rainplay.cn:38106" target="_blank" rel="noopener">服务器在线地图</a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== 底部页脚（全部页面共用结构） ==================== -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <h4>PaperClip</h4>
+          <p></p>
+        </div>
+
+        <!-- 中：快速链接 -->
+        <div>
+          <h4>快速链接</h4>
+          <ul class="footer-links">
+            <li><a href="index.html">首页</a></li>
+            <li><a href="minecraft.html">Minecraft</a></li>
+            <li><a href="contact.html">联系我</a></li>
+          </ul>
+        </div>
+
+        <!-- 右：社交账号 -->
+        <div>
+          <h4>社交账号</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/TUSI-ISUT" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://space.bilibili.com/3546855067617665" title="BiliBili：Paper_Clip_zero">BiliBili · Paper_Clip_zero</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 版权行：年份由 main.js 自动更新 -->
+      <div class="footer-bottom">
+        <p>© <span id="footer-year">2026</span> PaperClip · 保留所有权利</p>
+        <p>99%vibe codeing</p>
+        <p>Designed &amp; Built by PaperClip</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- 全局交互脚本 -->
+  <script src="main.js"></script>
+
+  <!-- Minecraft 页面专属：服务器状态查询 -->
+  <script>
+    (function () {
+      "use strict";
+
+      // —— 服务器地址（固定，如需修改改这里即可） ——
+      var SERVER = "xm.rainplay.cn";
+      var PORT   = "15991";
+
+      // —— 缓存配置 ——
+      var CACHE_KEY = "mc_status_" + SERVER + "_" + PORT; // 缓存键：按服务器区分
+      var CACHE_TTL = 320 * 1000;                          // 缓存有效期：320 秒
+
+      // —— DOM 引用 ——
+      var loading  = document.getElementById("mc-loading");
+      var errorBox = document.getElementById("mc-error");
+      var infoBox  = document.getElementById("mc-info");
+
+      // —— 工具：切换显示区块 ——
+      function show(el) { el.hidden = false; }
+      function hide(el) { el.hidden = true; }
+
+      // —— Minecraft 颜色名 → CSS 颜色映射表 ——
+      var MC_COLORS = {
+        black:        "#000000",
+        dark_blue:    "#0000AA",
+        dark_green:   "#00AA00",
+        dark_aqua:    "#00AAAA",
+        dark_red:     "#AA0000",
+        dark_purple:  "#AA00AA",
+        gold:         "#FFAA00",
+        gray:         "#AAAAAA",
+        dark_gray:    "#555555",
+        blue:         "#5555FF",
+        green:        "#55FF55",
+        aqua:         "#55FFFF",
+        red:          "#FF5555",
+        light_purple: "#FF55FF",
+        yellow:       "#FFFF55",
+        white:        "#FFFFFF"
+      };
+
+      // —— 递归转换 Minecraft JSON 文本组件为带颜色 HTML ——
+      // minebbs API 返回的 motd 是 MC 原生 JSON text component 格式
+      function motdJsonToHtml(component) {
+        if (!component) return "";
+        var html = "";
+        var color = component.color ? (MC_COLORS[component.color] || component.color) : "";
+        var styles = [];
+        if (color) styles.push("color: " + color);
+        if (component.bold) styles.push("font-weight: bold");
+        if (component.italic) styles.push("font-style: italic");
+        if (component.underlined) styles.push("text-decoration: underline");
+        if (component.strikethrough) styles.push("text-decoration: line-through");
+
+        // 当前节点的文本
+        if (component.text) {
+          if (styles.length) {
+            html += '<span style="' + styles.join("; ") + '">' + escapeHtml(component.text) + '</span>';
+          } else {
+            html += escapeHtml(component.text);
+          }
+        }
+
+        // 递归处理子节点（extra 数组）
+        if (component.extra && Array.isArray(component.extra)) {
+          for (var i = 0; i < component.extra.length; i++) {
+            html += motdJsonToHtml(component.extra[i]);
+          }
+        }
+        return html;
+      }
+
+      // —— HTML 转义，防止特殊字符注入 ——
+      function escapeHtml(text) {
+        var div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // —— 读取本地缓存（过期返回 null） ——
+      function readCache() {
+        try {
+          var raw = localStorage.getItem(CACHE_KEY);
+          if (!raw) return null;
+          var obj = JSON.parse(raw);
+          if (Date.now() - obj.time > CACHE_TTL) return null;
+          return obj.data;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // —— 写入本地缓存 ——
+      function writeCache(data) {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: data }));
+        } catch (e) {
+          // 存储满或隐私模式，忽略
+        }
+      }
+
+      // —— 构造 API 地址 ——
+      // 使用 minebbs API：正确支持自定义端口查询
+      function buildApiUrl() {
+        return "https://motd.minebbs.com/api/status?ip=" +
+               encodeURIComponent(SERVER) + "&port=" + encodeURIComponent(PORT);
+      }
+
+      // —— 查询服务器状态 ——
+      function queryStatus() {
+        hide(infoBox); hide(errorBox); show(loading);
+
+        fetch(buildApiUrl())
+          .then(function (res) {
+            if (!res.ok) throw new Error("请求失败（HTTP " + res.status + "）");
+            return res.json();
+          })
+          .then(function (data) {
+            hide(loading);
+
+            // 服务器离线（minebbs 返回 status 字段）
+            if (data.status !== "online") {
+              showError("服务器离线或无法连接,可能是服务器又炸了。");
+              return;
+            }
+
+            writeCache(data);
+            renderResult(data);
+          })
+          .catch(function (err) {
+            hide(loading);
+            showError("查询失败：" + err.message);
+          });
+      }
+
+      // —— 后台静默刷新（不显示加载态，不覆盖已有结果） ——
+      function silentRefresh() {
+        fetch(buildApiUrl())
+          .then(function (res) { if (!res.ok) throw new Error("err"); return res.json(); })
+          .then(function (data) {
+            if (data.status === "online") {
+              writeCache(data);
+              renderResult(data);
+            }
+          })
+          .catch(function () { /* 静默刷新失败不打扰用户 */ });
+      }
+
+      // —— 渲染查询结果（适配 minebbs API 字段格式） ——
+      function renderResult(data) {
+        // 服务器图标：minebbs 返回 icon 字段（data:image/png;base64,... 的 Data URI）
+        var favicon = document.getElementById("mc-favicon");
+        if (data.icon) {
+          favicon.src = data.icon;
+          favicon.style.display = "inline-block";
+        } else {
+          favicon.style.display = "none";
+        }
+
+        // 主机显示
+        document.getElementById("mc-host").textContent =
+          SERVER + (PORT && PORT !== "25565" ? ":" + PORT : "");
+
+        // 在线状态标签
+        var status = document.getElementById("mc-status");
+        status.textContent = "● 在线";
+        status.className = "mc-online";
+
+        // MOTD：将 minebbs 返回的 JSON 文本组件转换为带颜色 HTML
+        var motdHtml = motdJsonToHtml(data.motd);
+        // 换行处理：minebbs 的 motd JSON 中 \n 会被 escapeHtml 转义，需还原
+        motdHtml = motdHtml.replace(/\\n/g, "<br>");
+        document.getElementById("mc-motd").innerHTML = motdHtml || escapeHtml(data.pureMotd || "");
+
+        // 详细数据（minebbs 字段：version, players.online, players.max）
+        document.getElementById("mc-version").textContent = data.version || "未知";
+        document.getElementById("mc-players").textContent =
+          (data.players && data.players.online != null) ? data.players.online : "未知";
+        document.getElementById("mc-max").textContent =
+          (data.players && data.players.max != null) ? data.players.max : "未知";
+
+        show(infoBox);
+      }
+
+      // —— 显示错误 ——
+      function showError(msg) {
+        errorBox.textContent = msg;
+        show(errorBox);
+      }
+
+      // —— 下拉菜单交互：点击切换展开/收起，点击外部收起 ——
+      var dropdown = document.getElementById("mc-dropdown");
+      var dropdownBtn = document.getElementById("mc-download-btn");
+
+      dropdownBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        dropdown.classList.toggle("open");
+      });
+
+      // 点击页面任意处收起下拉
+      document.addEventListener("click", function () {
+        dropdown.classList.remove("open");
+      });
+
+      // 下拉菜单项点击时阻止冒泡，避免收起后无法跳转
+      var menu = document.getElementById("mc-dropdown-menu");
+      menu.addEventListener("click", function (e) {
+        e.stopPropagation();
+        dropdown.classList.remove("open");
+      });
+
+      // —— 页面加载入口：先读缓存秒开，再后台静默刷新 ——
+      // 设置下载链接：把两个下拉选项的 href 指向实际下载地址
+      // 原版客户端下载地址
+      menu.querySelectorAll("a")[0].href = "https://gh.bugdey.us.kg/https://github.com/TUSI-ISUT/files.minecraft.server/releases/download/mcpack/PaperClip.SMP.1.0.0.exe";
+      // 整合包客户端下载地址
+      menu.querySelectorAll("a")[1].href = "https://gh.bugdey.us.kg/https://github.com/TUSI-ISUT/files.minecraft.server/releases/download/mcpack/PaperClip.SMP.1.0.0.mrpack";
+
+      var cached = readCache();
+      if (cached) {
+        // 缓存命中：立即渲染，隐藏加载态
+        hide(loading);
+        renderResult(cached);
+        // 后台静默拉取最新数据
+        silentRefresh();
+      } else {
+        // 无缓存：正常查询
+        queryStatus();
+      }
+    })();
+  </script>
+</body>
+</html>

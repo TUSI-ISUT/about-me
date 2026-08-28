@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PaperClip | 联系我</title>
+  <!-- 网站图标：浏览器标签页显示 -->
+  <link rel="icon" type="image/jpeg" href="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" />
+  <!-- 主题预载脚本：页面渲染前根据 localStorage / 系统偏好设置主题，避免刷新时闪色 -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem("theme");
+      var theme = (saved === "light" || saved === "dark")
+        ? saved
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      if (theme === "light") document.documentElement.classList.add("light");
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ==================== 顶部导航栏（全部页面共用结构） ==================== -->
+  <header class="site-header">
+    <nav class="nav container">
+      <a href="index.html" class="nav-logo">
+        <img class="logo-dot" src="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" alt="PaperClip的头像" />PaperClip
+      </a>
+
+      <!-- 右侧功能区：导航链接 + 主题切换 + 汉堡按钮 -->
+      <div class="nav-right">
+        <ul class="nav-links">
+          <li><a class="nav-link" href="index.html">首页</a></li>
+          <li><a class="nav-link" href="minecraft.html">Minecraft</a></li>
+          <!-- 当前页：联系我 → active 高亮 -->
+          <li><a class="nav-link active" href="contact.html">联系我</a></li>
+        </ul>
+
+        <!-- 深浅色模式切换按钮（图标由 main.js 根据当前主题更新） -->
+        <button class="theme-toggle" id="theme-toggle" aria-label="切换深浅色模式" title="切换深浅色模式">🌞</button>
+
+        <!-- 汉堡按钮：仅手机端显示，控制下方菜单展开/收起 -->
+        <button class="nav-toggle" aria-label="切换导航菜单">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ==================== 主体内容 ==================== -->
+  <main>
+
+    <!-- ---------- 标题区 ---------- -->
+    <section class="page-head">
+      <div class="container">
+        <h1>让我们一起<span class="text-gradient">创造点什么</span></h1>
+      </div>
+    </section>
+
+    <!-- ---------- 联系方式卡片（居中展示） ---------- -->
+    <section class="container">
+      <div class="contact-layout">
+
+        <aside class="contact-card reveal">
+          <h3>联系方式</h3>
+
+
+          <!-- 邮箱 -->
+          <div class="contact-item">
+            <span class="icon">📧</span>
+            <a href="mailto:mc_yyds@qq.com">mc_yyds@qq.com</a>
+          </div>
+
+          <!-- 社交媒体链接 -->
+          <div class="contact-item">
+            <span class="icon"><img src="github.webp" alt="GitHub 图标" /></span>
+            <a href="https://github.com/TUSI-ISUT" target="_blank" rel="noopener">GitHub · github.com/TUSI-ISUT</a>
+          </div>
+
+          <div class="contact-item">
+            <span class="icon"><img src="bilibili.webp" alt="BiliBili 图标" /></span>
+            <a href="https://space.bilibili.com/3546855067617665" title="BiliBili：Paper_Clip_zero">BiliBili · Paper_Clip_zero</a>
+          </div>
+
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== 底部页脚（全部页面共用结构） ==================== -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <h4>PaperClip</h4>
+          <p></p>
+        </div>
+        <div>
+          <h4>快速链接</h4>
+          <ul class="footer-links">
+            <li><a href="index.html">首页</a></li>
+            <li><a href="minecraft.html">Minecraft</a></li>
+            <li><a href="contact.html">联系我</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>社交账号</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/TUSI-ISUT" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://space.bilibili.com/3546855067617665" title="BiliBili：Paper_Clip_zero">BiliBili · Paper_Clip_zero</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© <span id="footer-year">2026</span> PaperClip · 保留所有权利</p>
+        <p>99%vibe codeing</p>
+        <p>Designed &amp; Built by PaperClip</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
