@@ -8,26 +8,38 @@
   <title>PaperClip | 首页</title>
   <!-- 网站图标：浏览器标签页显示 -->
   <link rel="icon" type="image/jpeg" href="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" />
-  <!-- 主题预载脚本：页面渲染前根据 localStorage / 系统偏好设置主题，避免刷新时闪色
-       同时创建进度条 DOM：防止点击跳转时进度条挂载延迟导致 0→30% 无过渡效果 -->
+  <!-- 主题与过渡预载脚本：全部在首帧渲染前执行，避免闪色/闪烁 -->
   <script>
     (function () {
-      var saved = localStorage.getItem("theme");
+      /* 1. 主题预载：优先用户手动选择，否则跟随系统深浅色 */
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
       var theme = (saved === "light" || saved === "dark")
         ? saved
         : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
       if (theme === "light") document.documentElement.classList.add("light");
-      // 尽早创建进度条，保证第一次点击即能显示
+
+      /* 2. 过渡预载：不支持原生跨文档过渡的浏览器，且由站内跳转而来时，
+         在首帧前挂上入场类（配合 style.css 的 page-entering 规则），无入场闪烁 */
+      var nativeVT = ("onpageswap" in document) || ("onpagereveal" in document);
+      var fromSite = null;
+      try { fromSite = sessionStorage.getItem("pt"); } catch (e) {}
+      if (!nativeVT && fromSite === "1") {
+        document.documentElement.classList.add("page-entering");
+      }
+
+      /* 3. 尽早创建进度条 DOM（挂在 html 根节点），保证首次点击即可显示 */
       document.addEventListener("DOMContentLoaded", function () {
         if (!document.getElementById("nprogress-bar")) {
           var bar = document.createElement("div");
           bar.id = "nprogress-bar";
           bar.setAttribute("aria-hidden", "true");
-          document.body.appendChild(bar);
+          document.documentElement.appendChild(bar);
         }
       });
     })();
   </script>
+  <link rel="stylesheet" href="libs/aos.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -60,8 +72,8 @@
     </nav>
   </header>
 
-  <!-- ==================== 主体内容 ==================== -->
-  <main>
+  <!-- ==================== 主体内容（#swup 为 Swup 页面切换容器） ==================== -->
+  <main id="swup" class="transition-fade">
 
     <!-- ---------- 顶部简介：左圆形头像 + 右文字 ---------- -->
     <section class="container">
@@ -142,37 +154,38 @@
       <!-- data-width 为目标熟练度，进入视口时由 JS 播放生长动画 -->
       <div class="skills-grid">
 
-        <div class="skill reveal">
+        <div class="skill" data-aos="fade-up">
           <div class="skill-head"><b>React / Next.js</b><span>0%</span></div>
           <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
         </div>
 
-        <div class="skill reveal">
+        <div class="skill" data-aos="fade-up">
           <div class="skill-head"><b>Node.js / Python</b><span>0%</span></div>
           <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
         </div>
 
-        <div class="skill reveal">
+        <div class="skill" data-aos="fade-up">
           <div class="skill-head"><b>Figma / UI 设计</b><span>0%</span></div>
           <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
         </div>
 
-        <div class="skill reveal">
+        <div class="skill" data-aos="fade-up">
           <div class="skill-head"><b>Docker / DevOps</b><span>0%</span></div>
           <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
         </div>
 
-        <div class="skill reveal">
+        <div class="skill" data-aos="fade-up">
           <div class="skill-head"><b>TypeScript</b><span>0%</span></div>
           <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
         </div>
 
-        <div class="skill reveal">
+        <div class="skill" data-aos="fade-up">
           <div class="skill-head"><b>数据库 / PostgreSQL</b><span>0%</span></div>
           <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
         </div>
       </div>
     </section>
+  </main>
 
   <!-- ==================== 底部页脚（全部页面共用结构） ==================== -->
   <footer class="site-footer">
@@ -212,6 +225,12 @@
     </div>
   </footer>
 
+  <!-- 动画与页面切换库（本地文件，加载失败时 main.js 各模块自动降级） -->
+  <script src="libs/swup.min.js"></script>
+  <script src="libs/gsap.min.js"></script>
+  <script src="libs/ScrollTrigger.min.js"></script>
+  <script src="libs/lenis.min.js"></script>
+  <script src="libs/aos.js"></script>
   <!-- 全局交互脚本 -->
   <script src="main.js"></script>
 </body>

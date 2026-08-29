@@ -1,22 +1,31 @@
 /* ============================================================
    main.js —— 全局交互脚本（所有页面共用）
+   技术栈：Swup（页面切换）+ GSAP/ScrollTrigger（高级动画）
+           + Lenis（平滑滚动）+ AOS（滚动触发淡入）
    模块划分：
-   1. 导航栏（滚动阴影 / 汉堡菜单 / 高亮激活态兜底）
+   1. 导航栏（滚动阴影 / 汉堡菜单 / 高亮激活态）
    2. 深色/浅色模式切换（localStorage 持久化 + 跟随系统）
-   3. 滚动淡入动画（IntersectionObserver）
+   3. AOS 滚动触发淡入（data-aos 属性驱动）
    4. 技能进度条入场动画（首页）
    5. 页脚年份自动更新
-   6. 页面切换过渡（进度条 + View Transitions API + 兜底跳转）
+   6. 进度条（由 Swup 钩子驱动）
+   7. Swup 页面切换（容器替换 + 进出动画 + 模块重初始化 + 脚本重放）
+   8. Lenis 平滑滚动（与 ScrollTrigger 同步）
+   9. GSAP 首屏动画（首页英雄区入场 + 头像视差）
+   说明：所有库均为本地文件（libs/），无 CDN 依赖，可直接部署 Cloudflare Pages。
+   若某库加载失败，各模块均有 window.xxx 存在性守卫，功能不中断。
    ============================================================ */
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
   initThemeToggle();     // 深浅色切换
-  initReveal();          // 滚动淡入
+  initAOS();             // 滚动触发淡入
   initSkillBars();       // 技能进度条
   initFooterYear();      // 年份
   initProgressBar();     // 创建进度条 DOM
-  initPageTransitions(); // 页面跳转拦截 + 过渡 + 进度条驱动
+  initSmoothScroll();    // Lenis 平滑滚动
+  initSwup();            // 页面切换系统
+  initHeroFx();          // GSAP 首屏动画
 });
 
 /* ------------------------------------------------------------
@@ -50,14 +59,15 @@ function initNavbar() {
     );
   }
 
-  /* 1.3 激活态兜底：若某个页面忘记写 .active，
-     则按当前文件名自动匹配导航链接并高亮 */
+  /* 1.3 高亮当前页导航链接 */
+  updateNavActive();
+}
+
+/* 1.4 重新计算导航激活态：Swup 替换内容后 URL 变化时调用 */
+function updateNavActive() {
   const page = location.pathname.split("/").pop() || "index.html";
   document.querySelectorAll(".nav-link").forEach((link) => {
-    const target = link.getAttribute("href");
-    if (target && target === page && !link.classList.contains("active")) {
-      link.classList.add("active");
-    }
+    link.classList.toggle("active", link.getAttribute("href") === page);
   });
 }
 
@@ -107,31 +117,23 @@ function initThemeToggle() {
 }
 
 /* ------------------------------------------------------------
- * 3. 滚动淡入动画：带 .reveal 的元素进入视口时淡入上移
+ * 3. AOS 滚动触发淡入：带 data-aos 属性的元素进入视口时播放动画
+ *    HTML 写法：<div data-aos="fade-up"></div>
  * ---------------------------------------------------------- */
-function initReveal() {
-  const items = document.querySelectorAll(".reveal");
-  if (!items.length) return;
+function initAOS() {
+  if (!window.AOS) return; // AOS 未加载时元素仍可见（配合 html.no-js 兜底规则）
 
-  // 不支持 IntersectionObserver 时直接显示，保证内容可见
-  if (!("IntersectionObserver" in window)) {
-    items.forEach((el) => el.classList.add("in-view"));
-    return;
-  }
+  // AOS 可用：移除 no-js 类，让 aos.css 的初始隐藏与入场动画正常生效
+  document.documentElement.classList.remove("no-js");
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("in-view");
-          observer.unobserve(entry.target); // 只播放一次，节省性能
-        }
-      });
-    },
-    { threshold: 0.12 } // 元素露出 12% 时触发
-  );
-
-  items.forEach((el) => observer.observe(el));
+  AOS.init({
+    duration: 700,               // 动画时长
+    easing: "ease-out-cubic",    // 缓动曲线
+    once: true,                  // 只播放一次（与原 .reveal 行为一致）
+    offset: 80,                  // 元素露出 80px 后触发
+    // 用户偏好减少动态效果时直接禁用（元素立即可见）
+    disable: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  });
 }
 
 /* ------------------------------------------------------------
@@ -173,47 +175,37 @@ function initFooterYear() {
 }
 
 /* ------------------------------------------------------------
- * 6. 页面切换过渡系统：进度条 + View Transitions API
- *    - 拦截同源内链点击，启动 NProgress 风格进度条
- *    - 使用 startViewTransition() 实现浏览器原生页面进出场
- *    - 不支持的浏览器降级为普通跳转，进度条依然显示
- *    - 排除：target="_blank"、download、锚点(#)、跨域链接
+ * 6. 顶部进度条（NProgress 风格，由 Swup 钩子驱动）
+ *    visit:start → 30%，content:replace → 70%，visit:end → 冲顶淡出
  * ---------------------------------------------------------- */
-
-/** 6.1 进度条 DOM 单例与状态 */
 let progressEl = null;       // 进度条 DOM 元素
 let progressTimer = null;    // 渐进推进定时器
 let progressPercent = 0;     // 当前进度（0-100）
 
-/** 6.2 初始化：创建进度条 DOM 并挂载到 body，同时绑定 pageshow 收尾 */
+/* 6.1 创建进度条 DOM 并挂载到 <html>（body 会被 Swup 替换，挂根节点更稳） */
 function initProgressBar() {
-  // 避免重复创建
   if (document.getElementById("nprogress-bar")) {
     progressEl = document.getElementById("nprogress-bar");
-  } else {
-    progressEl = document.createElement("div");
-    progressEl.id = "nprogress-bar";
-    progressEl.setAttribute("aria-hidden", "true");
-    document.body.appendChild(progressEl);
+    return;
   }
+  progressEl = document.createElement("div");
+  progressEl.id = "nprogress-bar";
+  progressEl.setAttribute("aria-hidden", "true");
+  document.documentElement.appendChild(progressEl);
 }
 
-/** 6.3 显示/推进进度条到指定百分比
- *  进度条会在 30%~70% 区间缓慢爬升，避免卡住不动的视觉感受 */
+/* 6.2 显示/推进进度条：越接近 92% 爬升越慢，保持"加载中"的感知 */
 function showProgress(target) {
   if (!progressEl) return;
 
-  // 重置：清除 done 类、重新显示、恢复宽度为当前已到进度
   progressEl.classList.remove("done");
   progressEl.style.opacity = "1";
   progressEl.style.width = Math.max(progressPercent, target) + "%";
   progressPercent = target;
 
-  // 启动渐进推进：从当前进度缓慢爬到 92% 附近，保持"在加载中"的感知
   if (progressTimer) clearInterval(progressTimer);
   progressTimer = setInterval(() => {
     if (progressPercent < 92) {
-      // 越接近 92%，爬升越慢
       const step = (92 - progressPercent) * 0.08;
       progressPercent = Math.min(92, progressPercent + step);
       progressEl.style.width = progressPercent + "%";
@@ -224,7 +216,7 @@ function showProgress(target) {
   }, 180);
 }
 
-/** 6.4 完成进度条：立即冲顶到 100% 并淡出 */
+/* 6.3 完成进度条：冲顶 100% 并淡出 */
 function completeProgress() {
   if (!progressEl) return;
 
@@ -245,95 +237,133 @@ function completeProgress() {
   }, 700);
 }
 
-/** 6.5 判断是否为需要拦截的同源内链
- *  排除：跨域、新窗口、下载、锚点(#)、mailto/tel 等协议 */
-function shouldIntercept(link) {
-  if (!link || !link.href) return false;
-  // 同源校验（协议 + 域名 + 端口一致）
-  try {
-    const linkUrl = new URL(link.href, window.location.origin);
-    const isSameOrigin =
-      linkUrl.protocol === window.location.protocol &&
-      linkUrl.host === window.location.host;
-    if (!isSameOrigin) return false;
-  } catch (e) {
-    return false;
-  }
-  // 新窗口打开
-  if (link.target === "_blank") return false;
-  // 下载链接
-  if (link.hasAttribute("download")) return false;
-  // 锚点跳转（不离开当前页）
-  const href = link.getAttribute("href") || "";
-  if (href.startsWith("#")) return false;
-  // 非 http/https 协议（mailto, tel, minecraft 等）
-  if (href.startsWith("mailto:") || href.startsWith("tel:") ||
-      href.startsWith("javascript:") || href.startsWith("minecraft:")) return false;
-  // 中键或带修饰键点击（浏览器默认行为：新标签）
-  if (window._transitionMetaKey) return false;
-  return true;
+/* ------------------------------------------------------------
+ * 7. Swup 页面切换系统
+ *    - 拦截站内链接，fetch 新页面后只替换 #swup 容器（无整页刷新）
+ *    - 离场/入场动画由 CSS 类驱动（见 style.css 10.1）
+ *    - 内容替换后：重初始化模块 + 重放容器内脚本（如 Minecraft 查询）
+ *    - fetch 失败兜底为原生跳转，功能不中断
+ * ---------------------------------------------------------- */
+function initSwup() {
+  if (!window.Swup) return; // 库未加载 → 所有链接保持原生跳转
+
+  const swup = new Swup({
+    containers: ["#swup"],           // 仅替换 <main id="swup">
+    animateHistoryBrowsing: true,    // 前进/后退按钮也播放过渡动画
+  });
+  window.swupInstance = swup;
+
+  /* 7.1 访问开始：进度条 30%，随后缓慢爬升 */
+  swup.hooks.on("visit:start", () => {
+    showProgress(30);
+    setTimeout(() => showProgress(70), 120);
+  });
+
+  /* 7.2 内容替换完成：重初始化动态模块 + 重放容器内脚本 */
+  swup.hooks.on("content:replace", () => {
+    updateNavActive();                       // 导航高亮跟随新页面
+    initSkillBars();                         // 重新观察技能条（首页）
+    initFooterYear();                        // 页脚年份（幂等）
+    initHeroFx();                            // 首页英雄区 GSAP 动画（其它页自动跳过）
+    if (window.AOS && window.AOS.refreshHard) AOS.refreshHard(); // 重新扫描 data-aos
+    if (window.ScrollTrigger) ScrollTrigger.refresh();
+
+    // 同步 Lenis 滚动位置（Swup 默认已 scrollTo(0)，这里对齐内部状态）
+    if (window.lenisInstance) window.lenisInstance.scrollTo(0, { immediate: true });
+
+    // 收起手机端汉堡菜单
+    const toggle = document.querySelector(".nav-toggle");
+    const links = document.querySelector(".nav-links");
+    if (toggle && links) {
+      toggle.classList.remove("open");
+      links.classList.remove("open");
+    }
+
+    // 重放容器内的 <script>（如 minecraft.html 的服务器状态查询）：
+    // 浏览器不会重复执行被替换插入的脚本，需重建节点强制执行
+    document.querySelectorAll("#swup script").forEach((old) => {
+      const fresh = document.createElement("script");
+      // 复制原有属性（type / defer 等）
+      for (const attr of old.attributes) fresh.setAttribute(attr.name, attr.value);
+      fresh.textContent = old.textContent;
+      old.replaceWith(fresh);
+    });
+  });
+
+  /* 7.3 访问结束（入场动画完成）：进度条冲顶并淡出 */
+  swup.hooks.on("visit:end", () => completeProgress());
+
+  /* 7.4 获取失败兜底：直接原生跳转，功能不被阻断 */
+  swup.hooks.on("fetch:error", (visit) => {
+    if (visit && visit.to && visit.to.url) window.location.href = visit.to.url;
+  });
 }
 
-/** 6.6 绑定点击拦截 + 过渡跳转 */
-function initPageTransitions() {
-  document.addEventListener("click", async (event) => {
-    // 记录修饰键状态，用于 shouldIntercept 判断
-    window._transitionMetaKey =
-      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1;
+/* ------------------------------------------------------------
+ * 8. Lenis 平滑滚动：惯性滚动替代浏览器默认滚动
+ * ---------------------------------------------------------- */
+function initSmoothScroll() {
+  if (!window.Lenis) return;
+  // 用户偏好减少动态效果时不启用平滑滚动
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    const link = event.target.closest("a");
-    if (!shouldIntercept(link)) {
-      window._transitionMetaKey = false;
-      return;
-    }
-    window._transitionMetaKey = false;
+  const lenis = new Lenis({
+    autoRaf: true,       // 内部自动 requestAnimationFrame，无需手动驱动
+    lerp: 0.28,          // 惯性强度（0.05 极粘 → 0.6 极跟手，默认 0.28 适中）
+    duration: 1.0,       // 滚动动画最长持续秒数，防止长距离滚动拖得太慢
+    smoothWheel: true,   // 鼠标滚轮走平滑
+    smoothTouch: false,  // 移动端原生触摸滚动不接管（触摸跟手度 > 平滑）
+  });
+  window.lenisInstance = lenis;
 
-    // 同一页面（hash 不同不触发，但上面已排除 # 开头）
-    const url = link.href;
-    if (url === window.location.href) return;
+  // 与 GSAP ScrollTrigger 同步：Lenis 滚动时通知 ScrollTrigger 更新
+  if (window.ScrollTrigger) lenis.on("scroll", ScrollTrigger.update);
+}
 
-    event.preventDefault();
+/* ------------------------------------------------------------
+ * 9. GSAP 首屏动画（仅首页存在 .about-hero 时生效）
+ *    - 英雄区子元素交错入场
+ *    - 头像滚动视差（ScrollTrigger scrub）
+ *    Swup 跳转回首页时自动重播（initHeroFx 幂等）
+ * ---------------------------------------------------------- */
+let heroParallaxTrigger = null; // 头像视差触发器引用（重放前需销毁）
 
-    // 第 1 步：点击后立刻显示进度条，前进至 30%
-    showProgress(30);
+function initHeroFx() {
+  const hero = document.querySelector(".about-hero");
+  if (!hero || !window.gsap) return;
 
-    try {
-      // 第 2 步：短暂延时后前进到 70%（模拟过渡动画期间的加载反馈）
-      setTimeout(() => showProgress(70), 120);
+  // 注册 ScrollTrigger 插件（幂等），使下方 scrollTrigger 配置生效
+  if (window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
 
-      // 第 3 步：使用 View Transitions API 执行跳转
-      if (typeof document.startViewTransition === "function") {
-        const transition = document.startViewTransition(() => {
-          // startViewTransition 回调内部执行 DOM 变更，这里使用 location.href
-          // 注意：对于 MPA 跨页面，真正的过渡效果需浏览器支持 "same-origin view
-          // transitions"（Chrome 126+），其他浏览器会降级但不影响跳转
-          window.location.href = url;
-        });
-        // 等待过渡完成（若浏览器 MPA 过渡未生效，会立即 resolve）
-        if (transition.finished) await transition.finished;
-      } else {
-        // 降级方案：直接跳转
-        window.location.href = url;
-      }
-    } catch (e) {
-      // 任何异常都兜底跳转，保证功能不被阻断
-      window.location.href = url;
-    }
+  // 销毁旧的视差触发器，避免泄漏与重复
+  if (heroParallaxTrigger) {
+    heroParallaxTrigger.kill();
+    heroParallaxTrigger = null;
+  }
+
+  // 9.1 英雄区交错入场：头像先落位，文字随后跟上
+  gsap.from(hero.children, {
+    opacity: 0,
+    y: 26,
+    duration: 0.9,
+    ease: "power3.out",
+    stagger: 0.12,
+    delay: 0.05,
+    clearProps: "all", // 动画结束清除内联样式，避免影响后续交互
   });
 
-  /** 6.7 新页面加载完成后收尾进度条
-   *  pageshow 比 load 更早触发，且在 bfcache（往返缓存）恢复时也会触发 */
-  window.addEventListener("pageshow", () => {
-    completeProgress();
-  });
-
-  // 兜底：load 事件再执行一次，防止 pageshow 场景遗漏
-  window.addEventListener("load", () => {
-    completeProgress();
-  });
-
-  // 兼容：点击"返回/前进"按钮（popstate）后也收尾
-  window.addEventListener("popstate", () => {
-    completeProgress();
-  });
+  // 9.2 头像滚动视差：向下滚动时头像轻微下移，产生景深感
+  const avatar = hero.querySelector(".avatar");
+  if (avatar && window.ScrollTrigger) {
+    heroParallaxTrigger = gsap.to(avatar, {
+      yPercent: 12,
+      ease: "none",
+      scrollTrigger: {
+        trigger: hero,
+        start: "top top",
+        end: "bottom top",
+        scrub: true, // 滚动进度直接映射动画进度
+      },
+    });
+  }
 }

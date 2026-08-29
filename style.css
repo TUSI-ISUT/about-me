@@ -573,26 +573,16 @@ ul { list-style: none; }
 }
 
 /* ============================================================
-   7. 滚动淡入动画（JS 添加 .in-view 触发）
+   7. 滚动触发动画（已迁移至 AOS 库，data-aos 属性驱动，
+      样式见 libs/aos.css；本节仅保留减少动态效果偏好兜底）
    ============================================================ */
-.reveal {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
-}
 
-.reveal.in-view {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* 尊重用户"减少动态效果"的系统偏好 */
+/* 尊重用户"减少动态效果"的系统偏好：禁用全站动画/过渡 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;
     transition: none !important;
   }
-  .reveal { opacity: 1; transform: none; }
 }
 
 /* ============================================================
@@ -978,46 +968,66 @@ ul { list-style: none; }
 }
 
 /* ============================================================
-   10. 页面切换过渡动画 + 顶部进度条
+   10. 页面切换过渡（Swup）+ 平滑滚动（Lenis）+ 顶部进度条
    ============================================================ */
 
-/* ---------- 10.1 View Transitions API 动画 ----------
-   通过 document.startViewTransition() 在 MPA 中启用原生页面切换动画
-   旧页面：向左滑出 + 淡出 300ms
-   新页面：从右滑入 + 淡入 400ms
+/* ---------- 10.1 Swup 页面切换过渡 ----------
+   Swup 拦截站内链接 → fetch 新页 → 只替换 #swup 容器 → 播放进出场动画。
+   动画类时序（Swup 4 自动挂到 <html> 上）：
+     离场：is-changing + is-animating + is-leaving（等待容器过渡结束）
+     入场：is-rendering（替换内容后），随后所有类移除 → 过渡回默认态
    ---------------------------------------------------------- */
-@keyframes slide-out {
-  from { transform: translateX(0); opacity: 1; }
-  to   { transform: translateX(-30px); opacity: 0; }
+.transition-fade {
+  transition:
+    opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes slide-in {
-  from { transform: translateX(30px); opacity: 0; }
-  to   { transform: translateX(0); opacity: 1; }
+/* 旧页面退出：向左平移 30px + 淡出，300ms */
+html.is-leaving .transition-fade {
+  opacity: 0;
+  transform: translateX(-30px);
+  transition-duration: 0.3s;
 }
 
-/* 旧页面退出动画（离开当前页） */
-::view-transition-old(root) {
-  animation: slide-out 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+/* 新页面入场起点：内容替换瞬间无过渡跳到右侧 30px + 透明，
+   Swup 移除类后由默认 0.4s 过渡滑回原位 → 实现右侧滑入 */
+html.is-rendering .transition-fade {
+  opacity: 0;
+  transform: translateX(30px);
+  transition: none;
 }
 
-/* 新页面进入动画（进入目标页） */
-::view-transition-new(root) {
-  animation: slide-in 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
+/* ---------- 10.2 Lenis 平滑滚动必需样式（官方推荐） ---------- */
+html.lenis,
+html.lenis body {
+  height: auto;
 }
 
-/* 减少动态效果偏好：禁用过渡动画，直接切换 */
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-  }
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important; /* 覆盖全局 smooth，滚动由 Lenis 接管 */
 }
 
-/* ---------- 10.2 NProgress 风格顶部进度条 ----------
-   位置：固定在视口最顶部，z-index 极高
-   触发：点击同源内链 → 显示并前进
-   收尾：pageshow / load 事件 → 冲顶并淡出
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* ---------- 10.3 AOS 无 JS 兜底 ----------
+   aos.css 会把 [data-aos] 元素初始隐藏且无 no-js 保护：
+   <html class="no-js"> 时（JS 被禁用/加载失败）强制全部可见 */
+html.no-js [data-aos],
+html.no-js [data-aos^="fade"][data-aos^="fade"] {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* ---------- 10.4 NProgress 风格顶部进度条（由 Swup 钩子驱动） ----------
+   挂载点为 <html>（而非 body）：页面内容替换不影响进度条显示
+   触发：visit:start → 30%，content:replace → 70%，visit:end → 冲顶淡出
    ---------------------------------------------------------- */
 #nprogress-bar {
   position: fixed;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="no-js">
 <head>
   <meta charset="UTF-8" />
   <!-- 响应式必备：视口宽度 = 设备宽度，初始缩放 1 -->
@@ -8,26 +8,38 @@
   <title>PaperClip | Minecraft</title>
   <!-- 网站图标：浏览器标签页显示 -->
   <link rel="icon" type="image/jpeg" href="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" />
-  <!-- 主题预载脚本：页面渲染前根据 localStorage / 系统偏好设置主题，避免刷新时闪色
-       同时创建进度条 DOM：防止点击跳转时进度条挂载延迟导致 0→30% 无过渡效果 -->
+  <!-- 主题与过渡预载脚本：全部在首帧渲染前执行，避免闪色/闪烁 -->
   <script>
     (function () {
-      var saved = localStorage.getItem("theme");
+      /* 1. 主题预载：优先用户手动选择，否则跟随系统深浅色 */
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
       var theme = (saved === "light" || saved === "dark")
         ? saved
         : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
       if (theme === "light") document.documentElement.classList.add("light");
-      // 尽早创建进度条，保证第一次点击即能显示
+
+      /* 2. 过渡预载：不支持原生跨文档过渡的浏览器，且由站内跳转而来时，
+         在首帧前挂上入场类（配合 style.css 的 page-entering 规则），无入场闪烁 */
+      var nativeVT = ("onpageswap" in document) || ("onpagereveal" in document);
+      var fromSite = null;
+      try { fromSite = sessionStorage.getItem("pt"); } catch (e) {}
+      if (!nativeVT && fromSite === "1") {
+        document.documentElement.classList.add("page-entering");
+      }
+
+      /* 3. 尽早创建进度条 DOM（挂在 html 根节点），保证首次点击即可显示 */
       document.addEventListener("DOMContentLoaded", function () {
         if (!document.getElementById("nprogress-bar")) {
           var bar = document.createElement("div");
           bar.id = "nprogress-bar";
           bar.setAttribute("aria-hidden", "true");
-          document.body.appendChild(bar);
+          document.documentElement.appendChild(bar);
         }
       });
     })();
   </script>
+  <link rel="stylesheet" href="libs/aos.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -60,8 +72,8 @@
     </nav>
   </header>
 
-  <!-- ==================== 主体内容 ==================== -->
-  <main>
+  <!-- ==================== 主体内容（#swup 为 Swup 页面切换容器） ==================== -->
+  <main id="swup" class="transition-fade">
     <section class="container">
       <div class="page-head">
         <h1>Minecraft</h1>
@@ -101,7 +113,7 @@
       </div>
 
       <!-- 加入QQ群区域 -->
-      <div class="mc-qq-group">
+      <div class="mc-qq-group" data-aos="fade-up">
         <div class="mc-qq-info">
           <span class="mc-qq-icon">💬</span>
           <div>
@@ -125,6 +137,240 @@
         <a id="mc-copy-ip-btn" class="mc-join-btn" href="http://xm.rainplay.cn:38106" target="_blank" rel="noopener">服务器在线地图</a>
       </div>
     </section>
+
+    <!-- Minecraft 页面专属：服务器状态查询
+         （置于 #swup 容器内：Swup 站内跳转替换容器时，main.js 会自动重放本脚本） -->
+    <script>
+      (function () {
+        "use strict";
+
+        // —— 服务器地址（固定，如需修改改这里即可） ——
+        var SERVER = "xm.rainplay.cn";
+        var PORT   = "15991";
+
+        // —— 缓存配置 ——
+        var CACHE_KEY = "mc_status_" + SERVER + "_" + PORT; // 缓存键：按服务器区分
+        var CACHE_TTL = 320 * 1000;                          // 缓存有效期：320 秒
+
+        // —— DOM 引用 ——
+        var loading  = document.getElementById("mc-loading");
+        var errorBox = document.getElementById("mc-error");
+        var infoBox  = document.getElementById("mc-info");
+
+        // —— 工具：切换显示区块 ——
+        function show(el) { el.hidden = false; }
+        function hide(el) { el.hidden = true; }
+
+        // —— Minecraft 颜色名 → CSS 颜色映射表 ——
+        var MC_COLORS = {
+          black:        "#000000",
+          dark_blue:    "#0000AA",
+          dark_green:   "#00AA00",
+          dark_aqua:    "#00AAAA",
+          dark_red:     "#AA0000",
+          dark_purple:  "#AA00AA",
+          gold:         "#FFAA00",
+          gray:         "#AAAAAA",
+          dark_gray:    "#555555",
+          blue:         "#5555FF",
+          green:        "#55FF55",
+          aqua:         "#55FFFF",
+          red:          "#FF5555",
+          light_purple: "#FF55FF",
+          yellow:       "#FFFF55",
+          white:        "#FFFFFF"
+        };
+
+        // —— 递归转换 Minecraft JSON 文本组件为带颜色 HTML ——
+        // minebbs API 返回的 motd 是 MC 原生 JSON text component 格式
+        function motdJsonToHtml(component) {
+          if (!component) return "";
+          var html = "";
+          var color = component.color ? (MC_COLORS[component.color] || component.color) : "";
+          var styles = [];
+          if (color) styles.push("color: " + color);
+          if (component.bold) styles.push("font-weight: bold");
+          if (component.italic) styles.push("font-style: italic");
+          if (component.underlined) styles.push("text-decoration: underline");
+          if (component.strikethrough) styles.push("text-decoration: line-through");
+
+          // 当前节点的文本
+          if (component.text) {
+            if (styles.length) {
+              html += '<span style="' + styles.join("; ") + '">' + escapeHtml(component.text) + '</span>';
+            } else {
+              html += escapeHtml(component.text);
+            }
+          }
+
+          // 递归处理子节点（extra 数组）
+          if (component.extra && Array.isArray(component.extra)) {
+            for (var i = 0; i < component.extra.length; i++) {
+              html += motdJsonToHtml(component.extra[i]);
+            }
+          }
+          return html;
+        }
+
+        // —— HTML 转义，防止特殊字符注入 ——
+        function escapeHtml(text) {
+          var div = document.createElement("div");
+          div.textContent = text;
+          return div.innerHTML;
+        }
+
+        // —— 读取本地缓存（过期返回 null） ——
+        function readCache() {
+          try {
+            var raw = localStorage.getItem(CACHE_KEY);
+            if (!raw) return null;
+            var obj = JSON.parse(raw);
+            if (Date.now() - obj.time > CACHE_TTL) return null;
+            return obj.data;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        // —— 写入本地缓存 ——
+        function writeCache(data) {
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: data }));
+          } catch (e) {
+            // 存储满或隐私模式，忽略
+          }
+        }
+
+        // —— 构造 API 地址 ——
+        // 使用 minebbs API：正确支持自定义端口查询
+        function buildApiUrl() {
+          return "https://motd.minebbs.com/api/status?ip=" +
+                 encodeURIComponent(SERVER) + "&port=" + encodeURIComponent(PORT);
+        }
+
+        // —— 查询服务器状态 ——
+        function queryStatus() {
+          hide(infoBox); hide(errorBox); show(loading);
+
+          fetch(buildApiUrl())
+            .then(function (res) {
+              if (!res.ok) throw new Error("请求失败（HTTP " + res.status + "）");
+              return res.json();
+            })
+            .then(function (data) {
+              hide(loading);
+
+              // 服务器离线（minebbs 返回 status 字段）
+              if (data.status !== "online") {
+                showError("服务器离线或无法连接,可能是服务器又炸了。");
+                return;
+              }
+
+              writeCache(data);
+              renderResult(data);
+            })
+            .catch(function (err) {
+              hide(loading);
+              showError("查询失败：" + err.message);
+            });
+        }
+
+        // —— 后台静默刷新（不显示加载态，不覆盖已有结果） ——
+        function silentRefresh() {
+          fetch(buildApiUrl())
+            .then(function (res) { if (!res.ok) throw new Error("err"); return res.json(); })
+            .then(function (data) {
+              if (data.status === "online") {
+                writeCache(data);
+                renderResult(data);
+              }
+            })
+            .catch(function () { /* 静默刷新失败不打扰用户 */ });
+        }
+
+        // —— 渲染查询结果（适配 minebbs API 字段格式） ——
+        function renderResult(data) {
+          // 服务器图标：minebbs 返回 icon 字段（data:image/png;base64,... 的 Data URI）
+          var favicon = document.getElementById("mc-favicon");
+          if (data.icon) {
+            favicon.src = data.icon;
+            favicon.style.display = "inline-block";
+          } else {
+            favicon.style.display = "none";
+          }
+
+          // 主机显示
+          document.getElementById("mc-host").textContent =
+            SERVER + (PORT && PORT !== "25565" ? ":" + PORT : "");
+
+          // 在线状态标签：● 符号用 span 包裹，CSS 会隐藏之（改用 ::before 呼吸圆点）
+          var status = document.getElementById("mc-status");
+          status.innerHTML = '<span class="status-char">●</span> 在线';
+          status.className = "mc-online";
+
+          // MOTD：将 minebbs 返回的 JSON 文本组件转换为带颜色 HTML
+          var motdHtml = motdJsonToHtml(data.motd);
+          // 换行处理：minebbs 的 motd JSON 中 \n 会被 escapeHtml 转义，需还原
+          motdHtml = motdHtml.replace(/\\n/g, "<br>");
+          document.getElementById("mc-motd").innerHTML = motdHtml || escapeHtml(data.pureMotd || "");
+
+          // 详细数据（minebbs 字段：version, players.online, players.max）
+          document.getElementById("mc-version").textContent = data.version || "未知";
+          document.getElementById("mc-players").textContent =
+            (data.players && data.players.online != null) ? data.players.online : "未知";
+          document.getElementById("mc-max").textContent =
+            (data.players && data.players.max != null) ? data.players.max : "未知";
+
+          show(infoBox);
+        }
+
+        // —— 显示错误 ——
+        function showError(msg) {
+          errorBox.textContent = msg;
+          show(errorBox);
+        }
+
+        // —— 下拉菜单交互：点击切换展开/收起，点击外部收起 ——
+        var dropdown = document.getElementById("mc-dropdown");
+        var dropdownBtn = document.getElementById("mc-download-btn");
+
+        dropdownBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          dropdown.classList.toggle("open");
+        });
+
+        // 点击页面任意处收起下拉
+        document.addEventListener("click", function () {
+          dropdown.classList.remove("open");
+        });
+
+        // 下拉菜单项点击时阻止冒泡，避免收起后无法跳转
+        var menu = document.getElementById("mc-dropdown-menu");
+        menu.addEventListener("click", function (e) {
+          e.stopPropagation();
+          dropdown.classList.remove("open");
+        });
+
+        // —— 页面加载入口：先读缓存秒开，再后台静默刷新 ——
+        // 设置下载链接：把两个下拉选项的 href 指向实际下载地址
+        // 原版客户端下载地址
+        menu.querySelectorAll("a")[0].href = "https://gh.bugdey.us.kg/https://github.com/TUSI-ISUT/files.minecraft.server/releases/download/mcpack/PaperClip.SMP.1.0.0.exe";
+        // 整合包客户端下载地址
+        menu.querySelectorAll("a")[1].href = "https://gh.bugdey.us.kg/https://github.com/TUSI-ISUT/files.minecraft.server/releases/download/mcpack/PaperClip.SMP.1.0.0.mrpack";
+
+        var cached = readCache();
+        if (cached) {
+          // 缓存命中：立即渲染，隐藏加载态
+          hide(loading);
+          renderResult(cached);
+          // 后台静默拉取最新数据
+          silentRefresh();
+        } else {
+          // 无缓存：正常查询
+          queryStatus();
+        }
+      })();
+    </script>
   </main>
 
   <!-- ==================== 底部页脚（全部页面共用结构） ==================== -->
@@ -165,240 +411,13 @@
     </div>
   </footer>
 
+  <!-- 动画与页面切换库（本地文件，加载失败时 main.js 各模块自动降级） -->
+  <script src="libs/swup.min.js"></script>
+  <script src="libs/gsap.min.js"></script>
+  <script src="libs/ScrollTrigger.min.js"></script>
+  <script src="libs/lenis.min.js"></script>
+  <script src="libs/aos.js"></script>
   <!-- 全局交互脚本 -->
   <script src="main.js"></script>
-
-  <!-- Minecraft 页面专属：服务器状态查询 -->
-  <script>
-    (function () {
-      "use strict";
-
-      // —— 服务器地址（固定，如需修改改这里即可） ——
-      var SERVER = "xm.rainplay.cn";
-      var PORT   = "15991";
-
-      // —— 缓存配置 ——
-      var CACHE_KEY = "mc_status_" + SERVER + "_" + PORT; // 缓存键：按服务器区分
-      var CACHE_TTL = 320 * 1000;                          // 缓存有效期：320 秒
-
-      // —— DOM 引用 ——
-      var loading  = document.getElementById("mc-loading");
-      var errorBox = document.getElementById("mc-error");
-      var infoBox  = document.getElementById("mc-info");
-
-      // —— 工具：切换显示区块 ——
-      function show(el) { el.hidden = false; }
-      function hide(el) { el.hidden = true; }
-
-      // —— Minecraft 颜色名 → CSS 颜色映射表 ——
-      var MC_COLORS = {
-        black:        "#000000",
-        dark_blue:    "#0000AA",
-        dark_green:   "#00AA00",
-        dark_aqua:    "#00AAAA",
-        dark_red:     "#AA0000",
-        dark_purple:  "#AA00AA",
-        gold:         "#FFAA00",
-        gray:         "#AAAAAA",
-        dark_gray:    "#555555",
-        blue:         "#5555FF",
-        green:        "#55FF55",
-        aqua:         "#55FFFF",
-        red:          "#FF5555",
-        light_purple: "#FF55FF",
-        yellow:       "#FFFF55",
-        white:        "#FFFFFF"
-      };
-
-      // —— 递归转换 Minecraft JSON 文本组件为带颜色 HTML ——
-      // minebbs API 返回的 motd 是 MC 原生 JSON text component 格式
-      function motdJsonToHtml(component) {
-        if (!component) return "";
-        var html = "";
-        var color = component.color ? (MC_COLORS[component.color] || component.color) : "";
-        var styles = [];
-        if (color) styles.push("color: " + color);
-        if (component.bold) styles.push("font-weight: bold");
-        if (component.italic) styles.push("font-style: italic");
-        if (component.underlined) styles.push("text-decoration: underline");
-        if (component.strikethrough) styles.push("text-decoration: line-through");
-
-        // 当前节点的文本
-        if (component.text) {
-          if (styles.length) {
-            html += '<span style="' + styles.join("; ") + '">' + escapeHtml(component.text) + '</span>';
-          } else {
-            html += escapeHtml(component.text);
-          }
-        }
-
-        // 递归处理子节点（extra 数组）
-        if (component.extra && Array.isArray(component.extra)) {
-          for (var i = 0; i < component.extra.length; i++) {
-            html += motdJsonToHtml(component.extra[i]);
-          }
-        }
-        return html;
-      }
-
-      // —— HTML 转义，防止特殊字符注入 ——
-      function escapeHtml(text) {
-        var div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      // —— 读取本地缓存（过期返回 null） ——
-      function readCache() {
-        try {
-          var raw = localStorage.getItem(CACHE_KEY);
-          if (!raw) return null;
-          var obj = JSON.parse(raw);
-          if (Date.now() - obj.time > CACHE_TTL) return null;
-          return obj.data;
-        } catch (e) {
-          return null;
-        }
-      }
-
-      // —— 写入本地缓存 ——
-      function writeCache(data) {
-        try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: data }));
-        } catch (e) {
-          // 存储满或隐私模式，忽略
-        }
-      }
-
-      // —— 构造 API 地址 ——
-      // 使用 minebbs API：正确支持自定义端口查询
-      function buildApiUrl() {
-        return "https://motd.minebbs.com/api/status?ip=" +
-               encodeURIComponent(SERVER) + "&port=" + encodeURIComponent(PORT);
-      }
-
-      // —— 查询服务器状态 ——
-      function queryStatus() {
-        hide(infoBox); hide(errorBox); show(loading);
-
-        fetch(buildApiUrl())
-          .then(function (res) {
-            if (!res.ok) throw new Error("请求失败（HTTP " + res.status + "）");
-            return res.json();
-          })
-          .then(function (data) {
-            hide(loading);
-
-            // 服务器离线（minebbs 返回 status 字段）
-            if (data.status !== "online") {
-              showError("服务器离线或无法连接,可能是服务器又炸了。");
-              return;
-            }
-
-            writeCache(data);
-            renderResult(data);
-          })
-          .catch(function (err) {
-            hide(loading);
-            showError("查询失败：" + err.message);
-          });
-      }
-
-      // —— 后台静默刷新（不显示加载态，不覆盖已有结果） ——
-      function silentRefresh() {
-        fetch(buildApiUrl())
-          .then(function (res) { if (!res.ok) throw new Error("err"); return res.json(); })
-          .then(function (data) {
-            if (data.status === "online") {
-              writeCache(data);
-              renderResult(data);
-            }
-          })
-          .catch(function () { /* 静默刷新失败不打扰用户 */ });
-      }
-
-      // —— 渲染查询结果（适配 minebbs API 字段格式） ——
-      function renderResult(data) {
-        // 服务器图标：minebbs 返回 icon 字段（data:image/png;base64,... 的 Data URI）
-        var favicon = document.getElementById("mc-favicon");
-        if (data.icon) {
-          favicon.src = data.icon;
-          favicon.style.display = "inline-block";
-        } else {
-          favicon.style.display = "none";
-        }
-
-        // 主机显示
-        document.getElementById("mc-host").textContent =
-          SERVER + (PORT && PORT !== "25565" ? ":" + PORT : "");
-
-        // 在线状态标签：● 符号用 span 包裹，CSS 会隐藏之（改用 ::before 呼吸圆点）
-        var status = document.getElementById("mc-status");
-        status.innerHTML = '<span class="status-char">●</span> 在线';
-        status.className = "mc-online";
-
-        // MOTD：将 minebbs 返回的 JSON 文本组件转换为带颜色 HTML
-        var motdHtml = motdJsonToHtml(data.motd);
-        // 换行处理：minebbs 的 motd JSON 中 \n 会被 escapeHtml 转义，需还原
-        motdHtml = motdHtml.replace(/\\n/g, "<br>");
-        document.getElementById("mc-motd").innerHTML = motdHtml || escapeHtml(data.pureMotd || "");
-
-        // 详细数据（minebbs 字段：version, players.online, players.max）
-        document.getElementById("mc-version").textContent = data.version || "未知";
-        document.getElementById("mc-players").textContent =
-          (data.players && data.players.online != null) ? data.players.online : "未知";
-        document.getElementById("mc-max").textContent =
-          (data.players && data.players.max != null) ? data.players.max : "未知";
-
-        show(infoBox);
-      }
-
-      // —— 显示错误 ——
-      function showError(msg) {
-        errorBox.textContent = msg;
-        show(errorBox);
-      }
-
-      // —— 下拉菜单交互：点击切换展开/收起，点击外部收起 ——
-      var dropdown = document.getElementById("mc-dropdown");
-      var dropdownBtn = document.getElementById("mc-download-btn");
-
-      dropdownBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        dropdown.classList.toggle("open");
-      });
-
-      // 点击页面任意处收起下拉
-      document.addEventListener("click", function () {
-        dropdown.classList.remove("open");
-      });
-
-      // 下拉菜单项点击时阻止冒泡，避免收起后无法跳转
-      var menu = document.getElementById("mc-dropdown-menu");
-      menu.addEventListener("click", function (e) {
-        e.stopPropagation();
-        dropdown.classList.remove("open");
-      });
-
-      // —— 页面加载入口：先读缓存秒开，再后台静默刷新 ——
-      // 设置下载链接：把两个下拉选项的 href 指向实际下载地址
-      // 原版客户端下载地址
-      menu.querySelectorAll("a")[0].href = "https://gh.bugdey.us.kg/https://github.com/TUSI-ISUT/files.minecraft.server/releases/download/mcpack/PaperClip.SMP.1.0.0.exe";
-      // 整合包客户端下载地址
-      menu.querySelectorAll("a")[1].href = "https://gh.bugdey.us.kg/https://github.com/TUSI-ISUT/files.minecraft.server/releases/download/mcpack/PaperClip.SMP.1.0.0.mrpack";
-
-      var cached = readCache();
-      if (cached) {
-        // 缓存命中：立即渲染，隐藏加载态
-        hide(loading);
-        renderResult(cached);
-        // 后台静默拉取最新数据
-        silentRefresh();
-      } else {
-        // 无缓存：正常查询
-        queryStatus();
-      }
-    })();
-  </script>
 </body>
 </html>
