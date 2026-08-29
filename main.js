@@ -6,14 +6,17 @@
    3. 滚动淡入动画（IntersectionObserver）
    4. 技能进度条入场动画（首页）
    5. 页脚年份自动更新
+   6. 页面切换过渡（进度条 + View Transitions API + 兜底跳转）
    ============================================================ */
 
 document.addEventListener("DOMContentLoaded", () => {
-  initNavbar();        // 导航栏相关
-  initThemeToggle();   // 深浅色切换
-  initReveal();        // 滚动淡入
-  initSkillBars();     // 技能进度条
-  initFooterYear();    // 年份
+  initNavbar();          // 导航栏相关
+  initThemeToggle();     // 深浅色切换
+  initReveal();          // 滚动淡入
+  initSkillBars();       // 技能进度条
+  initFooterYear();      // 年份
+  initProgressBar();     // 创建进度条 DOM
+  initPageTransitions(); // 页面跳转拦截 + 过渡 + 进度条驱动
 });
 
 /* ------------------------------------------------------------
@@ -167,4 +170,170 @@ function initSkillBars() {
 function initFooterYear() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
+}
+
+/* ------------------------------------------------------------
+ * 6. 页面切换过渡系统：进度条 + View Transitions API
+ *    - 拦截同源内链点击，启动 NProgress 风格进度条
+ *    - 使用 startViewTransition() 实现浏览器原生页面进出场
+ *    - 不支持的浏览器降级为普通跳转，进度条依然显示
+ *    - 排除：target="_blank"、download、锚点(#)、跨域链接
+ * ---------------------------------------------------------- */
+
+/** 6.1 进度条 DOM 单例与状态 */
+let progressEl = null;       // 进度条 DOM 元素
+let progressTimer = null;    // 渐进推进定时器
+let progressPercent = 0;     // 当前进度（0-100）
+
+/** 6.2 初始化：创建进度条 DOM 并挂载到 body，同时绑定 pageshow 收尾 */
+function initProgressBar() {
+  // 避免重复创建
+  if (document.getElementById("nprogress-bar")) {
+    progressEl = document.getElementById("nprogress-bar");
+  } else {
+    progressEl = document.createElement("div");
+    progressEl.id = "nprogress-bar";
+    progressEl.setAttribute("aria-hidden", "true");
+    document.body.appendChild(progressEl);
+  }
+}
+
+/** 6.3 显示/推进进度条到指定百分比
+ *  进度条会在 30%~70% 区间缓慢爬升，避免卡住不动的视觉感受 */
+function showProgress(target) {
+  if (!progressEl) return;
+
+  // 重置：清除 done 类、重新显示、恢复宽度为当前已到进度
+  progressEl.classList.remove("done");
+  progressEl.style.opacity = "1";
+  progressEl.style.width = Math.max(progressPercent, target) + "%";
+  progressPercent = target;
+
+  // 启动渐进推进：从当前进度缓慢爬到 92% 附近，保持"在加载中"的感知
+  if (progressTimer) clearInterval(progressTimer);
+  progressTimer = setInterval(() => {
+    if (progressPercent < 92) {
+      // 越接近 92%，爬升越慢
+      const step = (92 - progressPercent) * 0.08;
+      progressPercent = Math.min(92, progressPercent + step);
+      progressEl.style.width = progressPercent + "%";
+    } else {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+  }, 180);
+}
+
+/** 6.4 完成进度条：立即冲顶到 100% 并淡出 */
+function completeProgress() {
+  if (!progressEl) return;
+
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+  }
+
+  progressPercent = 100;
+  progressEl.classList.add("done");
+
+  // 淡出动画结束后重置为 0，供下次跳转使用
+  setTimeout(() => {
+    progressEl.classList.remove("done");
+    progressEl.style.width = "0%";
+    progressEl.style.opacity = "0";
+    progressPercent = 0;
+  }, 700);
+}
+
+/** 6.5 判断是否为需要拦截的同源内链
+ *  排除：跨域、新窗口、下载、锚点(#)、mailto/tel 等协议 */
+function shouldIntercept(link) {
+  if (!link || !link.href) return false;
+  // 同源校验（协议 + 域名 + 端口一致）
+  try {
+    const linkUrl = new URL(link.href, window.location.origin);
+    const isSameOrigin =
+      linkUrl.protocol === window.location.protocol &&
+      linkUrl.host === window.location.host;
+    if (!isSameOrigin) return false;
+  } catch (e) {
+    return false;
+  }
+  // 新窗口打开
+  if (link.target === "_blank") return false;
+  // 下载链接
+  if (link.hasAttribute("download")) return false;
+  // 锚点跳转（不离开当前页）
+  const href = link.getAttribute("href") || "";
+  if (href.startsWith("#")) return false;
+  // 非 http/https 协议（mailto, tel, minecraft 等）
+  if (href.startsWith("mailto:") || href.startsWith("tel:") ||
+      href.startsWith("javascript:") || href.startsWith("minecraft:")) return false;
+  // 中键或带修饰键点击（浏览器默认行为：新标签）
+  if (window._transitionMetaKey) return false;
+  return true;
+}
+
+/** 6.6 绑定点击拦截 + 过渡跳转 */
+function initPageTransitions() {
+  document.addEventListener("click", async (event) => {
+    // 记录修饰键状态，用于 shouldIntercept 判断
+    window._transitionMetaKey =
+      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1;
+
+    const link = event.target.closest("a");
+    if (!shouldIntercept(link)) {
+      window._transitionMetaKey = false;
+      return;
+    }
+    window._transitionMetaKey = false;
+
+    // 同一页面（hash 不同不触发，但上面已排除 # 开头）
+    const url = link.href;
+    if (url === window.location.href) return;
+
+    event.preventDefault();
+
+    // 第 1 步：点击后立刻显示进度条，前进至 30%
+    showProgress(30);
+
+    try {
+      // 第 2 步：短暂延时后前进到 70%（模拟过渡动画期间的加载反馈）
+      setTimeout(() => showProgress(70), 120);
+
+      // 第 3 步：使用 View Transitions API 执行跳转
+      if (typeof document.startViewTransition === "function") {
+        const transition = document.startViewTransition(() => {
+          // startViewTransition 回调内部执行 DOM 变更，这里使用 location.href
+          // 注意：对于 MPA 跨页面，真正的过渡效果需浏览器支持 "same-origin view
+          // transitions"（Chrome 126+），其他浏览器会降级但不影响跳转
+          window.location.href = url;
+        });
+        // 等待过渡完成（若浏览器 MPA 过渡未生效，会立即 resolve）
+        if (transition.finished) await transition.finished;
+      } else {
+        // 降级方案：直接跳转
+        window.location.href = url;
+      }
+    } catch (e) {
+      // 任何异常都兜底跳转，保证功能不被阻断
+      window.location.href = url;
+    }
+  });
+
+  /** 6.7 新页面加载完成后收尾进度条
+   *  pageshow 比 load 更早触发，且在 bfcache（往返缓存）恢复时也会触发 */
+  window.addEventListener("pageshow", () => {
+    completeProgress();
+  });
+
+  // 兜底：load 事件再执行一次，防止 pageshow 场景遗漏
+  window.addEventListener("load", () => {
+    completeProgress();
+  });
+
+  // 兼容：点击"返回/前进"按钮（popstate）后也收尾
+  window.addEventListener("popstate", () => {
+    completeProgress();
+  });
 }

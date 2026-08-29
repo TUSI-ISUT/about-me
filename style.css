@@ -727,14 +727,59 @@ ul { list-style: none; }
   margin-bottom: 4px;
 }
 
+/* 状态胶囊：绿色"在线"标签 + 呼吸圆点动画 */
 .mc-online {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.82rem;
   color: var(--success);
   background: rgba(74, 222, 128, 0.1);
   border: 1px solid rgba(74, 222, 128, 0.3);
   padding: 3px 10px;
   border-radius: 999px;
+}
+
+/* 状态圆点本身 */
+.mc-online::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  /* 呼吸动画：缩放 + 轻微亮度波动 */
+  animation: mc-breathe 2.2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55);
+}
+
+/* 隐藏原文本中的 ● 符号（由伪元素替代，避免两个圆点） */
+.mc-online .status-char {
+  display: none;
+}
+
+/* 呼吸关键帧：圆点缩放同时光晕扩散-收缩 */
+@keyframes mc-breathe {
+  0% {
+    transform: scale(0.88);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55);
+    filter: brightness(0.95);
+  }
+  40% {
+    transform: scale(1.0);
+    box-shadow: 0 0 0 6px rgba(74, 222, 128, 0);
+    filter: brightness(1.1);
+  }
+  70% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.2);
+    filter: brightness(1.0);
+  }
+  100% {
+    transform: scale(0.88);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+    filter: brightness(0.95);
+  }
 }
 
 /* MOTD：保留 MC 原生颜色样式 */
@@ -930,4 +975,71 @@ ul { list-style: none; }
 /* —— 手机端：数据列表降为单列 —— */
 @media (max-width: 768px) {
   .mc-stats { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   10. 页面切换过渡动画 + 顶部进度条
+   ============================================================ */
+
+/* ---------- 10.1 View Transitions API 动画 ----------
+   通过 document.startViewTransition() 在 MPA 中启用原生页面切换动画
+   旧页面：向左滑出 + 淡出 300ms
+   新页面：从右滑入 + 淡入 400ms
+   ---------------------------------------------------------- */
+@keyframes slide-out {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(-30px); opacity: 0; }
+}
+
+@keyframes slide-in {
+  from { transform: translateX(30px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+/* 旧页面退出动画（离开当前页） */
+::view-transition-old(root) {
+  animation: slide-out 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 新页面进入动画（进入目标页） */
+::view-transition-new(root) {
+  animation: slide-in 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 减少动态效果偏好：禁用过渡动画，直接切换 */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/* ---------- 10.2 NProgress 风格顶部进度条 ----------
+   位置：固定在视口最顶部，z-index 极高
+   触发：点击同源内链 → 显示并前进
+   收尾：pageshow / load 事件 → 冲顶并淡出
+   ---------------------------------------------------------- */
+#nprogress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  width: 0%;
+  height: 3px;
+  background: linear-gradient(to right, #4facfe, #00f2fe);
+  box-shadow: 0 0 10px rgba(79, 172, 254, 0.7);
+  pointer-events: none;          /* 不拦截鼠标事件 */
+  transition:
+    width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.28s ease;
+  opacity: 1;
+}
+
+/* 收尾后淡出隐藏 */
+#nprogress-bar.done {
+  width: 100% !important;
+  opacity: 0;
+  transition:
+    width 0.25s ease,
+    opacity 0.35s ease 0.1s;     /* 先宽度冲顶，再延迟淡出 */
 }

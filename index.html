@@ -8,7 +8,8 @@
   <title>PaperClip | 首页</title>
   <!-- 网站图标：浏览器标签页显示 -->
   <link rel="icon" type="image/jpeg" href="83d703589ee9a084eecd2b348b15db9883ae510b.jpg" />
-  <!-- 主题预载脚本：页面渲染前根据 localStorage / 系统偏好设置主题，避免刷新时闪色 -->
+  <!-- 主题预载脚本：页面渲染前根据 localStorage / 系统偏好设置主题，避免刷新时闪色
+       同时创建进度条 DOM：防止点击跳转时进度条挂载延迟导致 0→30% 无过渡效果 -->
   <script>
     (function () {
       var saved = localStorage.getItem("theme");
@@ -16,6 +17,15 @@
         ? saved
         : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
       if (theme === "light") document.documentElement.classList.add("light");
+      // 尽早创建进度条，保证第一次点击即能显示
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!document.getElementById("nprogress-bar")) {
+          var bar = document.createElement("div");
+          bar.id = "nprogress-bar";
+          bar.setAttribute("aria-hidden", "true");
+          document.body.appendChild(bar);
+        }
+      });
     })();
   </script>
   <link rel="stylesheet" href="style.css" />
