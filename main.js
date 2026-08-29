@@ -374,12 +374,12 @@ function initHeroFx() {
  * 10. 背景音乐播放器
  *    - 右下角悬浮唱片按钮（main.js 动态创建，无需改 HTML）
  *    - 挂在 body 上（#swup 之外）：Swup 换页不打断播放
- *    - 页面专属曲单：Minecraft 页播 music/minecraft/（随机循环），
- *      其余页面（首页/联系我）播 music/zmd/（协议流起，顺延播放）
- *    - ♫ 曲单面板：24 首全列出手动点选，选中后固定循环不再随机
+ *    - 页面专属曲单：Minecraft 页播 music/minecraft/，
+ *      其余页面（首页/联系我）播 music/zmd/（终末地音乐）
+ *    - ♫ 曲单面板：全列出手动点选，选中后固定循环不再随机
  *    - Swup 换页自动切单：播放中无缝续播，暂停中仅更新待播曲目
- *    - localStorage 记忆开关；上次开着时首次任意点击自动续播
- *      （浏览器自动播放策略要求必须有一次用户手势）
+ *    - 打开页面自动随机播放；被浏览器自动播放策略拦截时
+ *      首次任意点击自动续播
  * ---------------------------------------------------------- */
 function initMusicPlayer() {
   /* 曲单定义：key → { dir: 音乐子目录, tracks: 曲目数组 }
@@ -388,7 +388,7 @@ function initMusicPlayer() {
     site: {
       dir: "music/zmd/",
       tracks: [
-        "协议流", // 站点默认曲：自动模式固定从这首开始，播完顺延下一首
+        // 明日方舟：终末地 音乐，随机循环播放
         "万里升平",
         "不周风",
         "大潮升",
@@ -421,14 +421,11 @@ function initMusicPlayer() {
     },
   };
 
-  /* 每个曲单独立的播放进度与顺序：
-     - mc：洗牌随机（且每次进入 MC 页随机换一首）
-     - site：按定义顺序播放（协议流在最前） */
+  /* 每个曲单独立的播放进度与顺序：均洗牌随机，
+     打开页面即从随机位置开始，播完自动下一曲（循环整个曲单） */
   const state = {};
   Object.keys(PLAYLISTS).forEach((key) => {
-    const order =
-      key === "mc" ? shuffle(PLAYLISTS[key].tracks) : [...PLAYLISTS[key].tracks];
-    state[key] = { order, index: 0 };
+    state[key] = { order: shuffle(PLAYLISTS[key].tracks), index: 0 };
   });
 
   /* Fisher-Yates 洗牌：每首歌等概率出现在任意位置
@@ -454,13 +451,8 @@ function initMusicPlayer() {
   let manualTrack = null;
 
   const audio = new Audio();
-  /* 音量记忆：localStorage("musicVolume")，0-100 的整数 */
-  let savedVolume = 35;
-  try {
-    const v = parseInt(localStorage.getItem("musicVolume"), 10);
-    if (v >= 0 && v <= 100) savedVolume = v;
-  } catch (e) {}
-  audio.volume = savedVolume / 100;
+  const VOLUME = 0.35; // 固定音量（已移除音量调节）
+  audio.volume = VOLUME;
   audio.preload = "metadata"; // 预载时长等元信息：点播时能更快起播，流量开销极小
 
   /* 音量淡入/淡出：换歌、播放、暂停时平滑过渡，避免爆音与突兀感 */
@@ -518,7 +510,7 @@ function initMusicPlayer() {
   function updateBtn() {
     const playing = !audio.paused;
     btn.classList.toggle("playing", playing);
-    const tip = (playing ? "暂停音乐：" : "播放音乐：") + (manualTrack || currentTrack()) + "（滚轮调音量 " + savedVolume + "%）";
+    const tip = (playing ? "暂停音乐：" : "播放音乐：") + (manualTrack || currentTrack());
     btn.title = tip;
     btn.setAttribute("aria-label", tip);
     if (!panel.hidden) refreshPanel(); // 面板开着时同步高亮与固定标记
@@ -534,7 +526,7 @@ function initMusicPlayer() {
       .play()
       .then(() => {
         // 起播音量淡入，避免上一首的音量突变
-        fadeVolume(savedVolume / 100, 600);
+        fadeVolume(VOLUME, 600);
         updateBtn();
       })
       .catch(() => {
@@ -549,7 +541,7 @@ function initMusicPlayer() {
     if (audio.paused) return;
     fadeVolume(0, 400, () => {
       audio.pause();
-      audio.volume = savedVolume / 100; // 复位音量，下次起播直接是记忆音量
+      audio.volume = VOLUME; // 复位音量，下次起播直接是固定音量
     });
     updateBtn();
   }
@@ -589,21 +581,10 @@ function initMusicPlayer() {
     } catch (e) {}
   }
 
-  /* 音量调节滚轮：悬停在唱片按钮上滚动即可调音量（0-100，步进 5） */
-  btn.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    savedVolume = Math.max(0, Math.min(100, savedVolume + (e.deltaY < 0 ? 5 : -5)));
-    audio.volume = savedVolume / 100;
-    try { localStorage.setItem("musicVolume", String(savedVolume)); } catch (err) {}
-    updateBtn();
-  }, { passive: false });
-
   btn.addEventListener("click", () => {
     if (audio.paused) {
-      try { localStorage.setItem("music", "on"); } catch (e) {}
       play();
     } else {
-      try { localStorage.setItem("music", "off"); } catch (e) {}
       pause();
     }
   });
@@ -622,7 +603,7 @@ function initMusicPlayer() {
   /* Swup 换页时同步曲单：Minecraft 页 ↔ 其它页
      - 手动点选模式：固定曲目不随页面变化
      - 播放中：无缝续播；暂停中：仅更新按钮提示
-     - 自动模式下每次进入 Minecraft 页随机挑一首（除协议流外） */
+     - 进入 Minecraft 页时随机换一首；回到其它页继续终末地曲单 */
   function syncToPage() {
     if (manualTrack) return; // 手动固定中，换页不切歌
     const key = pageToKey();
@@ -661,7 +642,7 @@ function initMusicPlayer() {
   let seq = 0;
   Object.keys(PLAYLISTS).forEach((key) => {
     const h = document.createElement("h4");
-    h.textContent = key === "mc" ? "Minecraft 音乐" : "站点音乐";
+    h.textContent = key === "mc" ? "Minecraft 音乐" : "终末地音乐";
     h.style.setProperty("--i", seq++);
     panel.appendChild(h);
 
@@ -688,7 +669,6 @@ function initMusicPlayer() {
         } else {
           // 固定该曲目循环播放，随机/换页逻辑全部让位
           manualTrack = name;
-          try { localStorage.setItem("music", "on"); } catch (err) {}
           play();
         }
         refreshPanel();
@@ -744,18 +724,27 @@ function initMusicPlayer() {
     closePanel();
   });
 
-  /* 上次开着音乐 → 首次点击页面任意处时自动续播
-     （点播放器自身区域除外：那些点击交给各自的点击逻辑） */
-  let savedMusic = null;
-  try { savedMusic = localStorage.getItem("music"); } catch (e) {}
-  if (savedMusic === "on") {
-    const resume = (e) => {
-      if (btn.contains(e.target) || listBtn.contains(e.target) || panel.contains(e.target)) return;
-      document.removeEventListener("pointerdown", resume);
-      if (audio.paused) play();
-    };
-    document.addEventListener("pointerdown", resume);
+  /* 打开页面即自动随机播放：
+     - 浏览器允许时（有媒体互动记录）直接起播
+     - 被自动播放策略拦截时，等待首次任意点击/触摸续播 */
+  function tryAutoplay() {
+    audio.src = expectedSrc();
+    updateMediaSession();
+    audio
+      .play()
+      .then(() => {
+        fadeVolume(VOLUME, 600);
+        updateBtn();
+      })
+      .catch(() => {
+        const resume = () => {
+          document.removeEventListener("pointerdown", resume);
+          if (audio.paused) play();
+        };
+        document.addEventListener("pointerdown", resume);
+      });
   }
+  tryAutoplay();
 
   updateBtn(); // 初始按钮态
 }
