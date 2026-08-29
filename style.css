@@ -1053,3 +1053,207 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
     width 0.25s ease,
     opacity 0.35s ease 0.1s;     /* 先宽度冲顶，再延迟淡出 */
 }
+
+/* ============================================================
+   11. 背景音乐播放器（悬浮唱片按钮，由 main.js 动态创建）
+   挂载点为 body（#swup 之外）：Swup 换页不打断播放
+   ============================================================ */
+.music-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: var(--transition);
+}
+
+.music-toggle:hover {
+  box-shadow: var(--shadow-hover);
+  transform: scale(1.06);
+}
+
+/* 唱片盘面：中心渐变主轴 + 同心纹理，播放时旋转 */
+.music-toggle .disc {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, var(--accent) 0 30%, transparent 32%),
+    repeating-radial-gradient(circle, #14161d 0 2px, #262b38 2px 4px);
+  animation: disc-spin 3.2s linear infinite;
+  animation-play-state: paused;   /* 暂停时静止 */
+}
+
+.music-toggle.playing .disc {
+  animation-play-state: running;  /* 播放时旋转 */
+}
+
+@keyframes disc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 右下角小徽标：▶ 待播放 / ‖ 播放中 */
+.music-toggle::after {
+  content: "▶";
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-size: 8px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.music-toggle.playing::after {
+  content: "‖";
+}
+
+/* 用户偏好减少动态效果时唱片不旋转 */
+@media (prefers-reduced-motion: reduce) {
+  .music-toggle .disc { animation: none; }
+}
+
+/* ---------- 11.1 曲单按钮（唱片按钮上方） ---------- */
+.music-list-btn {
+  position: fixed;
+  right: 26px;
+  bottom: 78px;
+  z-index: 900;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  transition: var(--transition);
+}
+
+.music-list-btn:hover {
+  color: var(--text);
+  box-shadow: var(--shadow-hover);
+  transform: scale(1.08);
+}
+
+/* ---------- 11.2 曲单面板：手动点选曲目 ---------- */
+.music-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 122px;
+  z-index: 900;
+  width: 220px;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-hover);
+  transform-origin: bottom right;         /* 从♫按钮方向弹出 */
+  animation: panel-in 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 收起中：缩小淡出，结束后由 JS 置 hidden */
+.music-panel.closing {
+  animation: panel-out 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes panel-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.96); }
+}
+
+.music-panel h4 {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin: 10px 4px 4px;
+}
+
+.music-panel h4:first-child {
+  margin-top: 0;
+}
+
+.music-panel .track {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+}
+
+.music-panel .track:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+/* 正在播放的曲目高亮 */
+.music-panel .track.active {
+  color: var(--accent);
+}
+
+/* 固定循环标记（手动点选后显示） */
+.music-panel .track .pin-tip {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+
+/* ---------- 11.3 面板内容级联入场：--i 序号由 JS 写入 ---------- */
+.music-panel h4,
+.music-panel .track {
+  animation: panel-row-in 0.32s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+
+@keyframes panel-row-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 用户偏好减少动态效果：面板动画全部禁用 */
+@media (prefers-reduced-motion: reduce) {
+  .music-panel,
+  .music-panel.closing,
+  .music-panel h4,
+  .music-panel .track {
+    animation: none;
+  }
+}

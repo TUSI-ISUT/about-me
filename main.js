@@ -12,6 +12,7 @@
    7. Swup 页面切换（容器替换 + 进出动画 + 模块重初始化 + 脚本重放）
    8. Lenis 平滑滚动（与 ScrollTrigger 同步）
    9. GSAP 首屏动画（首页英雄区入场 + 头像视差）
+   10. 背景音乐播放器（页面专属曲单 + 曲单面板手动点选固定循环）
    说明：所有库均为本地文件（libs/），无 CDN 依赖，可直接部署 Cloudflare Pages。
    若某库加载失败，各模块均有 window.xxx 存在性守卫，功能不中断。
    ============================================================ */
@@ -26,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSmoothScroll();    // Lenis 平滑滚动
   initSwup();            // 页面切换系统
   initHeroFx();          // GSAP 首屏动画
+  initMusicPlayer();     // 背景音乐播放器
 });
 
 /* ------------------------------------------------------------
@@ -366,4 +368,394 @@ function initHeroFx() {
       },
     });
   }
+}
+
+/* ------------------------------------------------------------
+ * 10. 背景音乐播放器
+ *    - 右下角悬浮唱片按钮（main.js 动态创建，无需改 HTML）
+ *    - 挂在 body 上（#swup 之外）：Swup 换页不打断播放
+ *    - 页面专属曲单：Minecraft 页播 music/minecraft/（随机循环），
+ *      其余页面（首页/联系我）播 music/zmd/（协议流起，顺延播放）
+ *    - ♫ 曲单面板：24 首全列出手动点选，选中后固定循环不再随机
+ *    - Swup 换页自动切单：播放中无缝续播，暂停中仅更新待播曲目
+ *    - localStorage 记忆开关；上次开着时首次任意点击自动续播
+ *      （浏览器自动播放策略要求必须有一次用户手势）
+ * ---------------------------------------------------------- */
+function initMusicPlayer() {
+  /* 曲单定义：key → { dir: 音乐子目录, tracks: 曲目数组 }
+     与 music/ 下的子文件夹一一对应；增删文件后同步这里（不带 .m4a 后缀） */
+  const PLAYLISTS = {
+    site: {
+      dir: "music/zmd/",
+      tracks: [
+        "协议流", // 站点默认曲：自动模式固定从这首开始，播完顺延下一首
+        "万里升平",
+        "不周风",
+        "大潮升",
+        "孤案灯青",
+        "寻暇日",
+        "山樆轻",
+        "戏彩绳",
+        "新壤",
+        "方兴",
+        "春景故人来",
+        "来时新社",
+        "烘炉",
+        "穆如清风",
+        "观陵水",
+        "青简注我",
+      ],
+    },
+    mc: {
+      dir: "music/minecraft/",
+      tracks: [
+        "Cat",
+        "Chirp",
+        "Creator(八音盒)",
+        "Creator",
+        "Lava Chicken",
+        "Mall",
+        "O's Piano",
+        "Wait",
+      ],
+    },
+  };
+
+  /* 每个曲单独立的播放进度与顺序：
+     - mc：洗牌随机（且每次进入 MC 页随机换一首）
+     - site：按定义顺序播放（协议流在最前） */
+  const state = {};
+  Object.keys(PLAYLISTS).forEach((key) => {
+    const order =
+      key === "mc" ? shuffle(PLAYLISTS[key].tracks) : [...PLAYLISTS[key].tracks];
+    state[key] = { order, index: 0 };
+  });
+
+  /* Fisher-Yates 洗牌：每首歌等概率出现在任意位置
+     （sort(() => Math.random() - 0.5) 的分布有偏差，弃用） */
+  function shuffle(list) {
+    const arr = [...list];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  /* 当前页面所属曲单：Minecraft 页 → mc，其余 → site */
+  function pageToKey() {
+    const page = location.pathname.split("/").pop() || "index.html";
+    return page === "minecraft.html" ? "mc" : "site";
+  }
+  let currentKey = pageToKey();
+
+  /* 手动点选状态：用户在曲单面板选中的曲目名
+     非空时固定循环该曲目，页面切换与随机逻辑全部让位 */
+  let manualTrack = null;
+
+  const audio = new Audio();
+  /* 音量记忆：localStorage("musicVolume")，0-100 的整数 */
+  let savedVolume = 35;
+  try {
+    const v = parseInt(localStorage.getItem("musicVolume"), 10);
+    if (v >= 0 && v <= 100) savedVolume = v;
+  } catch (e) {}
+  audio.volume = savedVolume / 100;
+  audio.preload = "metadata"; // 预载时长等元信息：点播时能更快起播，流量开销极小
+
+  /* 音量淡入/淡出：换歌、播放、暂停时平滑过渡，避免爆音与突兀感 */
+  let fadeRaf = null;
+  function fadeVolume(to, duration, done) {
+    if (fadeRaf) cancelAnimationFrame(fadeRaf);
+    fadeRaf = null;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      audio.volume = to;
+      if (done) done();
+      return;
+    }
+    const from = audio.volume;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      audio.volume = from + (to - from) * t;
+      if (t < 1) {
+        fadeRaf = requestAnimationFrame(step);
+      } else {
+        fadeRaf = null;
+        if (done) done();
+      }
+    };
+    fadeRaf = requestAnimationFrame(step);
+  }
+
+  /* 创建悬浮唱片按钮（挂在 body 上，Swup 换页不影响） */
+  const btn = document.createElement("button");
+  btn.className = "music-toggle";
+  btn.type = "button";
+  btn.innerHTML = '<span class="disc" aria-hidden="true"></span>';
+  document.body.appendChild(btn);
+
+  function currentTrack() {
+    const s = state[currentKey];
+    return s.order[s.index];
+  }
+
+  /* 按曲目名反查所属子目录（手动点选的曲目可能来自任一曲单） */
+  function trackDir(name) {
+    for (const key of Object.keys(PLAYLISTS)) {
+      if (PLAYLISTS[key].tracks.includes(name)) return PLAYLISTS[key].dir;
+    }
+    return "music/";
+  }
+
+  /* 当前应当播放的 src：手动点选优先，否则跟随页面曲单
+     （与 audio 的属性值比较用相对路径，避开绝对 URL 差异） */
+  function expectedSrc() {
+    const name = manualTrack || currentTrack();
+    return trackDir(name) + encodeURIComponent(name) + ".m4a";
+  }
+
+  function updateBtn() {
+    const playing = !audio.paused;
+    btn.classList.toggle("playing", playing);
+    const tip = (playing ? "暂停音乐：" : "播放音乐：") + (manualTrack || currentTrack()) + "（滚轮调音量 " + savedVolume + "%）";
+    btn.title = tip;
+    btn.setAttribute("aria-label", tip);
+    if (!panel.hidden) refreshPanel(); // 面板开着时同步高亮与固定标记
+  }
+
+  function play() {
+    // src 与当前曲单不一致（首次播放或换页切单）时重新加载
+    if (audio.getAttribute("src") !== expectedSrc()) {
+      audio.src = expectedSrc();
+      updateMediaSession();
+    }
+    audio
+      .play()
+      .then(() => {
+        // 起播音量淡入，避免上一首的音量突变
+        fadeVolume(savedVolume / 100, 600);
+        updateBtn();
+      })
+      .catch(() => {
+        /* 播放被浏览器策略拦截等情况：静默失败，按钮保持待播放态 */
+        updateBtn();
+      });
+    updateBtn(); // 立即反馈，不等 play() 完成
+  }
+
+  function pause() {
+    // 淡出到接近 0 后再真正暂停，松手时不会"啪"一声截断
+    if (audio.paused) return;
+    fadeVolume(0, 400, () => {
+      audio.pause();
+      audio.volume = savedVolume / 100; // 复位音量，下次起播直接是记忆音量
+    });
+    updateBtn();
+  }
+
+  /* 播放失败自动跳下一首：文件缺失/解码失败时不至于静默卡住。
+     连续失败达到曲单长度时停止尝试（曲单可能整体不可用）。 */
+  let errorStreak = 0;
+  audio.addEventListener("error", () => {
+    const s = state[currentKey];
+    if (manualTrack || ++errorStreak >= s.order.length) {
+      errorStreak = 0;
+      return;
+    }
+    s.index = (s.index + 1) % s.order.length;
+    play();
+  });
+  audio.addEventListener("playing", () => (errorStreak = 0));
+
+  /* 系统媒体会话：锁屏/媒体键/系统面板显示曲名，并支持硬件播放控制 */
+  function updateMediaSession() {
+    if (!("mediaSession" in navigator)) return;
+    const name = manualTrack || currentTrack();
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: name,
+      artist: "站点背景音乐",
+      album: currentKey === "mc" ? "Minecraft" : "zmd",
+    });
+    try {
+      navigator.mediaSession.setActionHandler("play", () => play());
+      navigator.mediaSession.setActionHandler("pause", () => pause());
+      navigator.mediaSession.setActionHandler("nexttrack", () => {
+        if (manualTrack) return; // 固定循环模式不响应切歌
+        const s = state[currentKey];
+        s.index = (s.index + 1) % s.order.length;
+        play();
+      });
+    } catch (e) {}
+  }
+
+  /* 音量调节滚轮：悬停在唱片按钮上滚动即可调音量（0-100，步进 5） */
+  btn.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    savedVolume = Math.max(0, Math.min(100, savedVolume + (e.deltaY < 0 ? 5 : -5)));
+    audio.volume = savedVolume / 100;
+    try { localStorage.setItem("musicVolume", String(savedVolume)); } catch (err) {}
+    updateBtn();
+  }, { passive: false });
+
+  btn.addEventListener("click", () => {
+    if (audio.paused) {
+      try { localStorage.setItem("music", "on"); } catch (e) {}
+      play();
+    } else {
+      try { localStorage.setItem("music", "off"); } catch (e) {}
+      pause();
+    }
+  });
+
+  /* 一曲播完：手动点选 → 循环同一首；自动模式 → 当前曲单下一首 */
+  audio.addEventListener("ended", () => {
+    if (manualTrack) {
+      play(); // 固定曲目循环
+      return;
+    }
+    const s = state[currentKey];
+    s.index = (s.index + 1) % s.order.length;
+    play();
+  });
+
+  /* Swup 换页时同步曲单：Minecraft 页 ↔ 其它页
+     - 手动点选模式：固定曲目不随页面变化
+     - 播放中：无缝续播；暂停中：仅更新按钮提示
+     - 自动模式下每次进入 Minecraft 页随机挑一首（除协议流外） */
+  function syncToPage() {
+    if (manualTrack) return; // 手动固定中，换页不切歌
+    const key = pageToKey();
+    if (key === currentKey) return;
+    currentKey = key;
+    if (key === "mc") {
+      const s = state.mc;
+      s.index = Math.floor(Math.random() * s.order.length); // 随机换一首
+    }
+    if (audio.paused) {
+      updateBtn();
+    } else {
+      play();
+    }
+  }
+  if (window.swupInstance) {
+    window.swupInstance.hooks.on("content:replace", syncToPage);
+  }
+
+  /* ---- 10.8 曲单面板：手动点选曲目（点选后固定循环，不再随机） ---- */
+  const listBtn = document.createElement("button");
+  listBtn.className = "music-list-btn";
+  listBtn.type = "button";
+  listBtn.textContent = "♫";
+  listBtn.title = "选择曲目";
+  listBtn.setAttribute("aria-label", "选择曲目");
+  document.body.appendChild(listBtn);
+
+  const panel = document.createElement("div");
+  panel.className = "music-panel";
+  panel.hidden = true;
+  panel.setAttribute("data-lenis-prevent", ""); // 面板内滚动不透传给 Lenis
+  document.body.appendChild(panel);
+
+  /* 按曲单分组生成曲目行（--i 为级联入场序号，配合 style.css 11.3 动画） */
+  let seq = 0;
+  Object.keys(PLAYLISTS).forEach((key) => {
+    const h = document.createElement("h4");
+    h.textContent = key === "mc" ? "Minecraft 音乐" : "站点音乐";
+    h.style.setProperty("--i", seq++);
+    panel.appendChild(h);
+
+    PLAYLISTS[key].tracks.forEach((name) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "track";
+      row.dataset.track = name;
+      row.innerHTML = '<span class="tname"></span><span class="pin-tip" hidden>循环</span>';
+      row.querySelector(".tname").textContent = name;
+      row.style.setProperty("--i", seq++);
+      panel.appendChild(row);
+
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (manualTrack === name) {
+          // 再点一次已固定曲目：取消固定，恢复页面自动曲单
+          manualTrack = null;
+          if (!audio.paused) {
+            play(); // 播放中 → 无缝切回当前页自动曲目
+          } else {
+            updateBtn();
+          }
+        } else {
+          // 固定该曲目循环播放，随机/换页逻辑全部让位
+          manualTrack = name;
+          try { localStorage.setItem("music", "on"); } catch (err) {}
+          play();
+        }
+        refreshPanel();
+      });
+    });
+  });
+
+  /* 刷新面板行状态：正在播放高亮 + 固定循环标记 */
+  function refreshPanel() {
+    const now = manualTrack || currentTrack();
+    panel.querySelectorAll(".track").forEach((row) => {
+      const name = row.dataset.track;
+      row.classList.toggle("active", name === now && !audio.paused);
+      row.querySelector(".pin-tip").hidden = name !== manualTrack;
+    });
+  }
+
+  /* 面板开合：点♫按钮切换；点面板以外区域收起 */
+  /* 收起：先播放缩小淡出动画，动画结束后再真正隐藏
+     （prefers-reduced-motion 下动画被禁用，用定时器兜底隐藏） */
+  function closePanel() {
+    if (panel.hidden || panel.classList.contains("closing")) return;
+    panel.classList.add("closing");
+    let finished = false;
+    panel.addEventListener("animationend", function onEnd(e) {
+      if (e.target !== panel) return; // 忽略子元素的动画结束事件
+      panel.removeEventListener("animationend", onEnd);
+      finished = true;
+      panel.classList.remove("closing");
+      panel.hidden = true;
+    });
+    setTimeout(() => {
+      if (finished) return;
+      panel.classList.remove("closing");
+      panel.hidden = true;
+    }, 230);
+  }
+
+  listBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (panel.hidden) {
+      panel.hidden = false;
+      refreshPanel();
+    } else {
+      closePanel();
+    }
+  });
+
+  panel.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("click", (e) => {
+    if (panel.hidden) return;
+    if (panel.contains(e.target) || listBtn.contains(e.target)) return;
+    closePanel();
+  });
+
+  /* 上次开着音乐 → 首次点击页面任意处时自动续播
+     （点播放器自身区域除外：那些点击交给各自的点击逻辑） */
+  let savedMusic = null;
+  try { savedMusic = localStorage.getItem("music"); } catch (e) {}
+  if (savedMusic === "on") {
+    const resume = (e) => {
+      if (btn.contains(e.target) || listBtn.contains(e.target) || panel.contains(e.target)) return;
+      document.removeEventListener("pointerdown", resume);
+      if (audio.paused) play();
+    };
+    document.addEventListener("pointerdown", resume);
+  }
+
+  updateBtn(); // 初始按钮态
 }
