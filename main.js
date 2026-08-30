@@ -17,6 +17,9 @@
    若某库加载失败，各模块均有 window.xxx 存在性守卫，功能不中断。
    ============================================================ */
 
+/* 站点版本号：发版时只改这里，页脚自动同步显示 */
+const SITE_VERSION = "v0.0.7";
+
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
   initThemeToggle();     // 深浅色切换
@@ -24,11 +27,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initSkillBars();       // 技能进度条
   initTimeline();        // 首页"我的轨迹"折叠
   initFooterYear();      // 年份
+  initVersion();         // 页脚版本号
   initProgressBar();     // 创建进度条 DOM
   initSmoothScroll();    // Lenis 平滑滚动
   initSwup();            // 页面切换系统
   initHeroFx();          // GSAP 首屏动画
   initMusicPlayer();     // 背景音乐播放器
+  initGiscusShield();    // 留言板滚轮屏蔽层（依赖 Lenis，需在其后执行）
 });
 
 /* ------------------------------------------------------------
@@ -158,6 +163,34 @@ function initAOS() {
 }
 
 /* ------------------------------------------------------------
+ * 3.5 留言板滚轮屏蔽层（contact 页）
+ *     giscus 是跨域 iframe：鼠标悬停其上时滚轮事件派发给 iframe
+ *     内部，Lenis 完全收不到；而 giscus iframe 自适应内容高度、
+ *     自身不可滚动，滚轮要么被吞掉要么触发浏览器原生瞬时滚动，
+ *     与 Lenis 的平滑滚动打架，表现为卡顿。
+ *     解法：盖一层透明屏蔽，让滚轮落在页面上由 Lenis 接管；
+ *     点击屏蔽层后可正常操作留言板，鼠标移出自动恢复。
+ *     触摸设备无此问题（不启用）；Lenis 未启用时也无需屏蔽。
+ * ---------------------------------------------------------- */
+function initGiscusShield() {
+  const box = document.querySelector(".giscus-box");
+  if (!box || !window.lenisInstance) return;
+
+  // 幂等：Swup 换页重放时不重复创建
+  if (box.querySelector(".giscus-shield")) return;
+
+  const shield = document.createElement("div");
+  shield.className = "giscus-shield";
+  shield.title = "点击后可操作留言板";
+  box.appendChild(shield);
+
+  // 点击 → 解除屏蔽，可点击/输入/滚动留言板内部
+  shield.addEventListener("click", () => shield.classList.add("off"));
+  // 鼠标移出留言板区域 → 恢复屏蔽，滚轮重新由页面平滑接管
+  box.addEventListener("mouseleave", () => shield.classList.remove("off"));
+}
+
+/* ------------------------------------------------------------
  * 4. 技能进度条：进入视口时从 0 生长到目标宽度（首页）
  *    HTML 写法：<div class="bar-fill" data-width="85%"></div>
  * ---------------------------------------------------------- */
@@ -221,6 +254,14 @@ function initTimeline() {
 function initFooterYear() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
+}
+
+/* 5.1 页脚版本号：填充所有 .site-version（与顶部 SITE_VERSION 单一来源） */
+function initVersion() {
+  document.querySelectorAll(".site-version").forEach((el) => {
+    el.textContent = SITE_VERSION;
+  });
+  console.log(`PaperClip ${SITE_VERSION}`);
 }
 
 /* ------------------------------------------------------------
@@ -315,6 +356,7 @@ function initSwup() {
     initTimeline();                          // 时间轴折叠（首页，幂等）
     initFooterYear();                        // 页脚年份（幂等）
     initHeroFx();                            // 首页英雄区 GSAP 动画（其它页自动跳过）
+    initGiscusShield();                      // 留言板滚轮屏蔽层（contact 页，幂等）
     if (window.AOS && window.AOS.refreshHard) AOS.refreshHard(); // 重新扫描 data-aos
     if (window.ScrollTrigger) ScrollTrigger.refresh();
 

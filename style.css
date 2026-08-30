@@ -555,8 +555,8 @@ ul { list-style: none; }
 .site-footer {
   border-top: 1px solid var(--border);
   background: var(--footer-bg); /* 比页面更深一层（浅色模式下为米灰） */
-  padding: 56px 0 28px;
-  margin-top: auto;           /* 配合 body flex，保证内容少时页脚贴底 */
+  padding: 56px 0 88px;         /* 底部留白：滚到底时版权行不被右下角悬浮播放器遮挡 */
+  margin-top: auto;             /* 配合 body flex，保证内容少时页脚贴底 */
 }
 
 .footer-grid {
@@ -1356,6 +1356,7 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
 
 /* 13.2 留言板容器（contact 页）：卡片化，giscus iframe 自适应 */
 .giscus-box {
+  position: relative;         /* 供滚轮屏蔽层 .giscus-shield 定位 */
   margin-top: 24px;
   padding: 20px;
   border-radius: var(--radius);
@@ -1365,6 +1366,26 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
 }
 
 .giscus-box iframe { width: 100% !important; }
+
+/* 13.3 留言板滚轮屏蔽层：盖住整个留言板，滚轮事件落在页面上
+   由 Lenis 平滑接管（修复悬停评论区滚动卡顿，见 main.js 3.5） */
+.giscus-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* 点击解除屏蔽后隐藏，可正常操作留言板 */
+.giscus-shield.off {
+  display: none;
+}
+
+/* 触摸设备/无悬停指针：不存在滚轮卡顿问题，直接操作留言板 */
+@media (hover: none), (pointer: coarse) {
+  .giscus-shield { display: none; }
+}
 
 .giscus-pending {
   margin: 0;
