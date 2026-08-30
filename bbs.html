@@ -460,6 +460,21 @@
         0 0 4px rgba(255, 255, 255, 0.18);
     }
 
+    /* ---------- COLOR 命令：磷光配色切换（绿磷/琥珀/蓝白） ----------
+       与 #crt.aperture 同级：进光圈终端前会摘掉这些类，互不打架 */
+    #crt.phos-green {
+      --fg: #4dff7a; --fg-dim: #1f8f42; --yellow: #b8ffcf; --cyan: #7dffb0;
+      --err: #ff8d66; --dos-blue: #003300; color: var(--fg);
+    }
+    #crt.phos-amber {
+      --fg: #ffb000; --fg-dim: #9a6a00; --yellow: #ffe08a; --cyan: #ffd24d;
+      --err: #ff5c5c; --dos-blue: #402800; color: var(--fg);
+    }
+    #crt.phos-blue {
+      --fg: #7ecbff; --fg-dim: #40708f; --yellow: #ffb35c; --cyan: #7ecbff;
+      --err: #ff7a5c; --dos-blue: #0d2b4f; color: var(--fg);
+    }
+
     /* ---------- 手机端 ---------- */
     @media (max-width: 640px) {
       body { padding: 10px; }
@@ -626,6 +641,8 @@
           try { n.stop(); } catch (e) {}
         });
         liveSfx = [];
+        midiPlaying = false;   // 被停的可能包括后台 MIDI，状态一并复位
+        stopSpectrum();
       }
 
       /* 拨号音：350Hz + 440Hz 双音（北美标准拨号音） */
@@ -1039,9 +1056,11 @@
           ["    GitHub  github.com/TUSI-ISUT", "cyn"],
           ["    B站     Paper_Clip_zero", "cyn"],
           ["", "dim"],
-          ["  ── 时代广告 ──", "dim"],
-          ["  \"486DX2/66 带 8MB 内存，跑 Win95 贼快！\"", "dim"],
-          ["  \"最新游戏《仙剑奇侠传》到货，4 张软盘～\"", "dim"],
+          ["  ── 友情链接 ──", "amb"],
+          ["  ▸ 现代模式主页 ...... hell0.dpdns.org", "cyn"],
+          ["  ▸ Minecraft 页 ...... hell0.dpdns.org/minecraft.html", "cyn"],
+          ["  ▸ 留言板 ............ hell0.dpdns.org/contact.html", "cyn"],
+          ["  ▸ MC 服务器 ......... xm.rainplay.cn:" + MC_PORT, "cyn"],
           ["", "dim"],
         ], true);
       }
@@ -1545,6 +1564,7 @@
           { n: "DOOM",        d: true, t: "07-02-97  10:02p" },
           { n: "仙剑奇侠传",  d: true, t: "07-20-97  11:40p" },
           { n: "PORTAL",      d: true, t: "03-15-98  2:20p" },
+          { n: "SNAKE.EXE",   s: 12288, t: "05-01-97  7:30p" },
           { n: "SANGO.TXT",   s: 512, t: "07-20-97  11:42p", c: [
             "《仙剑奇侠传》通关感想（含剧透）：",
             "锁妖塔塌下来那一刻，谁没哭过呢。",
@@ -1605,9 +1625,10 @@
           ["  " + pad("PLAY", 12) + "播放 MIDI 音乐文件。", ""],
           ["  " + pad("VER / VOL", 12) + "显示 DOS 版本与磁盘卷标。", ""],
           ["  " + pad("DATE / TIME", 12) + "显示或设置日期与时间。", ""],
+          ["  " + pad("COLOR", 12) + "切换磷光配色。", ""],
           ["  " + pad("CLS / EXIT", 12) + "清除屏幕 / 关闭计算机。", ""],
           ["", "dim"],
-          ["  BBS 拨号上站 · PORTAL 光圈科技终端 · TAB 补全。", "dim"],
+          ["  BBS · PORTAL 光圈终端 · SNAKE 贪吃蛇 · TAB 补全。", "dim"],
           ["", "dim"],
         ];
       }
@@ -1826,6 +1847,37 @@
 
       var midiPlaying = false;   // 有真 MIDI 在后台播放时为 true
 
+      /* ---- 频谱动画：播放期间在状态栏右侧画 10 段字符频谱 ---- */
+      var analyser = null, spectrumTimer = null, spectrumSaved = "";
+      function startSpectrum() {
+        if (!ac || spectrumTimer) return;
+        if (!analyser) {
+          analyser = ac.createAnalyser();
+          analyser.fftSize = 64;
+          master.connect(analyser);
+        }
+        spectrumSaved = sbRight.textContent;
+        var data = new Uint8Array(analyser.frequencyBinCount);
+        var BLOCKS = "▁▂▃▄▅▆▇█";
+        spectrumTimer = setInterval(function () {
+          analyser.getByteFrequencyData(data);
+          var bars = "", bands = 10, step = Math.floor(data.length / bands) || 1;
+          for (var b = 0; b < bands; b++) {
+            var sum = 0;
+            for (var k = 0; k < step; k++) sum += data[b * step + k];
+            bars += BLOCKS.charAt(Math.min(7, Math.round(sum / step / 255 * 7)));
+          }
+          sbRight.textContent = bars;
+        }, 120);
+      }
+      function stopSpectrum() {
+        if (spectrumTimer) {
+          clearInterval(spectrumTimer);
+          spectrumTimer = null;
+          sbRight.textContent = spectrumSaved;
+        }
+      }
+
       function playMidi() {
         if (!ac || muted) return 0;
         var f = { E5: 659.26, Ds5: 622.25, D5: 587.33, C5: 523.25, B4: 493.88,
@@ -1840,13 +1892,14 @@
         return (t - ac.currentTime) * 1000;
       }
 
-      var PLAY_MID_URL = "Never%20Gonna%20Give%20You%20Up.mid";
+      var PLAY_MID_URL = "music/Never%20Gonna%20Give%20You%20Up.mid";
 
       async function playMidFile() {
         /* play 是开关：播放中再输入一次 = 停止 */
         if (midiPlaying) {
           stopAllSfx();
           midiPlaying = false;
+          stopSpectrum();
           await type("已停止。", "dim");
           print("");
           return;
@@ -1860,7 +1913,8 @@
         } catch (e) { dur = 0; }
         if (dur) {
           midiPlaying = true;
-          setTimeout(function () { midiPlaying = false; }, dur);
+          startSpectrum();
+          setTimeout(function () { midiPlaying = false; stopSpectrum(); }, dur);
           await type("后台播放中（约 " + Math.round(dur / 600) / 10 +
             " 分钟）。再输入一次 play 停止。", "cyn");
         } else {
@@ -1949,7 +2003,7 @@
       }
 
       /* Tab 补全：无空格时补命令名，有空格时补当前目录下的文件/目录名 */
-      var DOS_CMDS = ["autoexec.bat", "bbs", "bbs.com", "cd", "chkdsk", "cls", "config.sys",
+      var DOS_CMDS = ["autoexec.bat", "bbs", "bbs.com", "cd", "chkdsk", "cls", "color", "config.sys", "snake", "snake.exe",
         "date", "defrag", "del", "dir", "echo", "exit", "fdisk", "help", "label", "md",
         "mem", "mkdir", "ping", "play", "rd", "readme.txt", "scandisk", "time", "tree",
         "type", "ver", "vol", "win"];
@@ -1975,6 +2029,14 @@
         if (cmd === "bbs" || cmd === "bbs.com") {
           print("");
           await runBBS();
+          if (!leaving) print("");
+          return;
+        }
+
+        /* snake：贪吃蛇 */
+        if (cmd === "snake" || cmd === "snake.exe") {
+          print("");
+          await runSnake();
           if (!leaving) print("");
           return;
         }
@@ -2118,6 +2180,27 @@
         } else if (cmd === "exit") {
           /* DOS 提示符下 EXIT = 关机，退出复古模式回到主页 */
           exitRetro();
+        } else if (cmd.indexOf("color") === 0) {
+          /* COLOR：切换磷光配色（green / amber / blue / grey） */
+          var carg = line.slice(5).trim().toLowerCase();
+          var cmap = { green: "phos-green", amber: "phos-amber", blue: "phos-blue", grey: "", gray: "" };
+          if (!carg) {
+            await renderLines([
+              ["── COLOR 配色 ───────────────────────────", "amb"],
+              ["  用法：COLOR <green|amber|blue|grey>", ""],
+              ["  不带参数显示本帮助。选择会记在 CMOS 里。", "dim"],
+              ["", "dim"],
+            ], true);
+          } else if (carg in cmap) {
+            crt.classList.remove("phos-green", "phos-amber", "phos-blue");
+            if (cmap[carg]) crt.classList.add(cmap[carg]);
+            try { localStorage.setItem("dos_color", carg); } catch (e2) {}
+            await type("配色已切换：" + carg + "。", "cyn");
+            print("");
+          } else {
+            await type("未知的配色：" + carg + "。可选 green / amber / blue / grey。", "err");
+            print("");
+          }
         } else if (cmd.indexOf("format") === 0) {
           await type("警告：C: 盘上所有数据将会丢失!", "err");
           await type("是否继续 (Y/N)? N", "");
@@ -2125,8 +2208,7 @@
           print("");
           print("");
         } else if (cmd === "edit") {
-          await type("EDIT 已被 SysOp 删除。查看文本请使用 TYPE。", "dim");
-          print("");
+                    await runEdit();
         } else if (cmd === "doom") {
           await type("程序太大，无法装入内存。", "err");
           print("");
@@ -2186,8 +2268,7 @@
             await type("磁盘高速缓存程序已装载 (2048KB)。", "dim");
             print("");
           } else if (base === "edit.com") {
-            await type("EDIT 已被 SysOp 删除。查看文本请使用 TYPE。", "dim");
-            print("");
+            await runEdit();
           } else if (/\.exe$/.test(base) && base.indexOf("doom") === 0) {
             await type("程序太大，无法装入内存。", "err");
             print("");
@@ -2198,6 +2279,117 @@
             print("Bad command or file name", "err");
           }
         }
+      }
+
+      /* ---- SNAKE.EXE：贪吃蛇（方向键/WASD，Q 退出）----
+       网格渲染在单个 <p> 里逐帧刷新；吃到食物加速加分 */
+      async function runSnake() {
+        var W = 28, H = 14;
+        await type("SNAKE.EXE · 贪吃蛇 1.0", "amb");
+        await type("方向键 / WASD 移动 · Q 退出。墙会咬人，尾巴也是。", "dim");
+        print("");
+        var snake = [{ x: 8, y: 7 }, { x: 7, y: 7 }, { x: 6, y: 7 }];
+        var dir = { x: 1, y: 0 }, nextDir = dir;
+        var score = 0, speed = 160, dead = false, quit = false;
+        var food = null;
+        function placeFood() {
+          for (;;) {
+            var f = { x: Math.floor(Math.random() * W), y: Math.floor(Math.random() * H) };
+            if (!snake.some(function (c) { return c.x === f.x && c.y === f.y; })) return f;
+          }
+        }
+        food = placeFood();
+        var board = print("", "amb");
+        var bar = print("", "dim");
+        function draw() {
+          var grid = [];
+          for (var r = 0; r < H; r++) grid.push(new Array(W).fill("·"));
+          snake.forEach(function (c, i) { grid[c.y][c.x] = i === 0 ? "◍" : "█"; });
+          grid[food.y][food.x] = "◆";
+          var s = "";
+          for (var r2 = 0; r2 < H; r2++) s += grid[r2].join("") + "\n";
+          board.textContent = s;
+          bar.textContent = "得分 " + score + " · 长度 " + snake.length;
+          scrollBottom();
+        }
+        function onKey(e) {
+          var k = e.key.toLowerCase();
+          var d = null;
+          if (k === "arrowup" || k === "w") d = { x: 0, y: -1 };
+          else if (k === "arrowdown" || k === "s") d = { x: 0, y: 1 };
+          else if (k === "arrowleft" || k === "a") d = { x: -1, y: 0 };
+          else if (k === "arrowright" || k === "d") d = { x: 1, y: 0 };
+          else if (k === "q") { quit = true; }
+          if (d) {
+            e.preventDefault();
+            if (d.x !== -dir.x || d.y !== -dir.y) nextDir = d;   // 禁止 180° 掉头
+          }
+        }
+        document.addEventListener("keydown", onKey);
+        await new Promise(function (done) {
+          var iv = null;
+          function step() {
+            if (leaving || quit) { clearInterval(iv); done(); return; }
+            dir = nextDir;
+            var head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+            if (head.x < 0 || head.y < 0 || head.x >= W || head.y >= H ||
+                snake.some(function (c) { return c.x === head.x && c.y === head.y; })) {
+              dead = true; clearInterval(iv); done(); return;
+            }
+            snake.unshift(head);
+            if (head.x === food.x && head.y === food.y) {
+              score += 10; food = placeFood();
+              if (speed > 80) speed -= 6;
+              clearInterval(iv); iv = setInterval(step, speed);
+              beep(660, 0.06, 0.04, "square");
+            } else {
+              snake.pop();
+            }
+            draw();
+          }
+          iv = setInterval(step, speed);
+          draw();
+        });
+        document.removeEventListener("keydown", onKey);
+        if (dead) await type("GAME OVER · 得分 " + score + " 。尾巴不咬人，墙才咬。", "err");
+        else await type("退出游戏 · 得分 " + score + " 。", "dim");
+        print("");
+      }
+
+      /* ---- EDIT：逐行留言编辑器（copy con 风格）----
+       每行一条输入，单独输入 . 结束并存入留言草稿；
+       输入 /q 中途放弃。Esc 仍会关机退出。 */
+      async function runEdit() {
+        await type("MS-DOS 编辑器 · 留言草稿.TXT", "amb");
+        await type("逐行输入内容；单独一个 . 结束并保存；/q 放弃。", "dim");
+        print("");
+        var buf = [];
+        for (;;) {
+          if (leaving) return;
+          var ln = await ask("> ");
+          if (leaving) return;
+          if (!ln) continue;
+          if (ln === "/q") {
+            await type("已放弃。什么都没保存。", "dim");
+            print("");
+            return;
+          }
+          if (ln === ".") break;
+          buf.push(ln);
+          if (buf.length >= 8) {
+            await type("（已到 8 行上限，自动结束。）", "dim");
+            break;
+          }
+        }
+        if (!buf.length) {
+          await type("空白文档，未保存。", "dim");
+          print("");
+          return;
+        }
+        msgSave(buf.join(" "));
+        chime();
+        await type("已存入留言板草稿。msg list 查看 · msg send 发布。", "cyn");
+        print("");
       }
 
       /* ---------------- DOS 主循环 ---------------- */
@@ -2427,6 +2619,7 @@
         inDial = true;         // 启动动画可双击跳过
         dialDone = false;
         skipFlag = false;
+        crt.classList.remove("phos-green", "phos-amber", "phos-blue");
         crt.classList.add("aperture");
         screen.innerHTML = "";
         sbSet("光圈科技 · 终端 v3.11");
@@ -2502,6 +2695,12 @@
       async function bootSequence() {
         power.remove();
         crt.classList.add("booting");
+        try {
+          var savedColor = localStorage.getItem("dos_color");
+          if (savedColor === "green") crt.classList.add("phos-green");
+          else if (savedColor === "amber") crt.classList.add("phos-amber");
+          else if (savedColor === "blue") crt.classList.add("phos-blue");
+        } catch (eSaved) {}
         inDial = true;
         statusbar.classList.add("on");
         sbSet("PaperClip DOS v6.22");

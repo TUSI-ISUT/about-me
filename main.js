@@ -18,7 +18,7 @@
    ============================================================ */
 
 /* 站点版本号：发版时只改这里，页脚自动同步显示 */
-const SITE_VERSION = "v0.2.0";
+const SITE_VERSION = "v0.2.5";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
@@ -765,6 +765,22 @@ function initMusicPlayer() {
     play();
   });
   audio.addEventListener("playing", () => (errorStreak = 0));
+
+  /* 预加载下一曲：当前曲目起播后，把曲单里的下一首拉进缓存，
+     切歌时浏览器直接命中缓存，不再等网络 */
+  let preloadedKey = null;
+  const preloaded = new Audio();
+  preloaded.preload = "auto";
+  function preloadNext() {
+    const s = state[currentKey];
+    const next = s.order[(s.index + 1) % s.order.length];
+    const url = PLAYLISTS[currentKey].dir + encodeURIComponent(next) + ".m4a";
+    if (preloadedKey !== url) {
+      preloaded.src = url;
+      preloadedKey = url;
+    }
+  }
+  audio.addEventListener("playing", preloadNext);
 
   /* 系统媒体会话：锁屏/媒体键/系统面板显示曲名，并支持硬件播放控制 */
   function updateMediaSession() {

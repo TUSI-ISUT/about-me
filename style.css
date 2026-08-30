@@ -581,6 +581,23 @@ ul { list-style: none; }
    ============================================================ */
 
 /* 联系方式卡片：单卡片居中展示 */
+/* 学业提示条：联系页顶部醒目通知 */
+.school-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 640px;
+  margin: -8px auto 36px;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+}
+.school-notice .notice-icon { font-size: 1.6rem; flex-shrink: 0; }
+.school-notice p { margin: 0; font-size: 0.95rem; line-height: 1.6; }
+.school-notice strong { color: var(--accent); }
+
 .contact-layout {
   max-width: 560px;           /* 限制卡片宽度，视觉更聚焦 */
   margin: 0 auto;
@@ -712,6 +729,14 @@ ul { list-style: none; }
   padding-top: 26px;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+/* 备案等页脚内联链接：虚线下划线，悬停提亮 */
+.footer-bottom a {
+  border-bottom: 1px dashed currentColor;
+}
+.footer-bottom a:hover {
+  color: var(--accent);
 }
 
 /* ============================================================
