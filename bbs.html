@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="PaperClip BBS · 拨号上站的复古终端模拟器" />
+  <meta name="theme-color" content="#050607" />
+  <link rel="icon" type="image/jpeg" href="00.jpg" />
+  <title>PaperClip BBS · 复古模式</title>
+  <style>
+    /* ---------- 复古像素字体：Fusion Pixel（OFL 开源，本地 fonts/ 目录）
+       12px 网格点阵字库，含 latin 与简体中文字形；字号取 12 的整数倍
+       （24px / 12px）保证像素锐利不失真 ---------- */
+    @font-face {
+      font-family: "Fusion Pixel";
+      src: url("fonts/fusion-pixel-12px-monospaced-latin.ttf.woff2") format("woff2");
+      font-display: swap;
+      unicode-range: U+0000-00FF, U+2000-206F, U+2190-21FF, U+2500-257F, U+2580-259F, U+25A0-25FF;
+    }
+    @font-face {
+      font-family: "Fusion Pixel";
+      src: url("fonts/fusion-pixel-12px-monospaced-zh_hans.ttf.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    /* ---------- DOS 终端：纯黑屏幕 + 浅灰文字 + ANSI 亮色 ---------- */
+    :root {
+      --fg: #c9c9c9;            /* DOS 默认浅灰文字 */
+      --fg-dim: #6e6e6e;        /* 暗灰 */
+      --yellow: #ffe95c;        /* ANSI 亮黄（强调） */
+      --cyan: #5ce0e0;          /* ANSI 亮青 */
+      --err: #ff5555;           /* ANSI 亮红 */
+      --bg: #000000;
+      --dos-blue: #0000a8;      /* DOS 状态栏蓝 */
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      background:
+        radial-gradient(ellipse at center, #0b0b0d 0%, var(--bg) 70%),
+        var(--bg);
+      color: var(--fg);
+      font-family: "Fusion Pixel", "Consolas", "Courier New", monospace;
+      overflow: hidden;
+      padding: 22px;         /* 留出 CRT 显示器外壳边框 */
+    }
+
+    /* ---------- 屏幕外壳：曲面圆角 + 显示器边框 + 玻璃内阴影 ---------- */
+    #crt {
+      position: relative;
+      height: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 22px 26px 26px;
+      overflow: hidden;
+      font-size: 12px;       /* 点阵字体原生尺寸：12px（中文站名除外） */
+      border-radius: 20px;
+      background: radial-gradient(ellipse at 50% 35%, rgba(255, 255, 255, 0.03), transparent 65%);
+      /* 显示器塑料边框圈 + 玻璃曲面内阴影 */
+      box-shadow:
+        0 0 0 10px #16171c,
+        0 0 0 12px #0b0c0f,
+        0 22px 60px rgba(0, 0, 0, 0.85),
+        inset 0 0 120px rgba(0, 0, 0, 0.9);
+      cursor: text;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---------- CRT 玻璃层效果（自下而上：滚纹 → 反光 → 噪点 → 扫描线 → 暗角） ---------- */
+
+    /* 滚动干扰纹：一条淡亮带缓缓从上往下扫过 */
+    #band {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: -30%;
+      height: 140px;
+      z-index: 4;
+      pointer-events: none;
+      background: linear-gradient(
+        to bottom,
+        transparent,
+        rgba(255, 255, 255, 0.05) 45%,
+        rgba(255, 255, 255, 0.02) 60%,
+        transparent
+      );
+      animation: band-roll 8.5s linear infinite;
+    }
+
+    @keyframes band-roll {
+      from { top: -25%; }
+      to   { top: 115%; }
+    }
+
+    /* 玻璃反光：左上一团柔光 + 一道斜向高光 */
+    #glare {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 55% 40% at 20% 6%, rgba(255, 255, 255, 0.075), transparent 60%),
+        linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.03) 46%, transparent 55%);
+    }
+
+    /* 动态噪点：细颗粒雪花了 */
+    #noise {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      opacity: 0.05;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+      animation: noise-jitter 0.45s steps(4) infinite;
+    }
+
+    @keyframes noise-jitter {
+      0%   { background-position: 0 0; }
+      25%  { background-position: -34px 22px; }
+      50%  { background-position: 22px -30px; }
+      75%  { background-position: -18px -14px; }
+      100% { background-position: 0 0; }
+    }
+
+    /* 扫描线 */
+    #crt::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0) 0 2px,
+        rgba(0, 0, 0, 0.22) 2px 4px
+      );
+      z-index: 5;
+    }
+
+    /* 屏幕暗角 */
+    #crt::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 6;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+    }
+
+    /* 轻微闪烁（呼吸式亮度波动） */
+    #screen {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      font-size: inherit;    /* 跟随 #crt 的 12px 点阵尺寸 */
+      line-height: 1.7;
+      /* 文字发光 + 轻微 RGB 色差（红/青错边），模拟荧光粉成像 */
+      text-shadow:
+        1px 0 0 rgba(255, 70, 70, 0.24),
+        -1px 0 0 rgba(60, 220, 255, 0.24),
+        0 0 4px rgba(230, 230, 230, 0.2);
+      animation: flicker 4.2s infinite;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--fg-dim) transparent;
+    }
+
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      92%      { opacity: 1; }
+      93%      { opacity: 0.86; }
+      94%      { opacity: 1; }
+      97%      { opacity: 0.93; }
+      98%      { opacity: 1; }
+    }
+
+    #screen p { white-space: pre-wrap; word-break: break-all; min-height: 1.5em; }
+    #screen a { color: var(--amber); text-decoration: underline; }
+
+    .dim  { color: var(--fg-dim); text-shadow: none; }
+    .amb  { color: var(--yellow); text-shadow: 0 0 6px rgba(255, 233, 92, 0.3); }
+    .err  { color: var(--err); text-shadow: 0 0 6px rgba(255, 85, 85, 0.3); }
+    .wht  { color: #ffffff; text-shadow: 0 0 4px rgba(255, 255, 255, 0.25); }
+    .cyn  { color: var(--cyan); text-shadow: 0 0 6px rgba(92, 224, 224, 0.28); }
+
+    /* ASCII 横幅：全角块状字符点阵，12px 原生尺寸保证像素锐利且等宽对齐 */
+    #screen p.art {
+      font-size: 12px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* ---------- 输入行：提示符 + 透明 input + 块状光标 ---------- */
+    #input-row {
+      display: none;
+      align-items: baseline;
+      gap: 0;
+      padding: 4px 0 0;
+      flex-shrink: 0;
+    }
+
+    #input-row.on { display: flex; }
+
+    #prompt { white-space: pre; }
+
+    /* 输入区：真实 input 透明叠加，镜像层负责显示文字与块状光标 */
+    #input-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 80px;
+      overflow: hidden;
+    }
+
+    #mirror {
+      display: block;
+      min-height: 1.5em;
+      white-space: pre;
+    }
+
+    #mirror-inner {
+      display: inline-block;
+      white-space: pre;
+    }
+
+    /* 块状光标：跟随真实插入点，输入时自动重置闪烁 */
+    #mirror .m-cur {
+      display: inline-block;
+      width: 0.62em;
+      height: 1.1em;
+      margin-right: 1px;
+      background: var(--fg);
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+      animation: blink 1.06s steps(1) infinite;
+      vertical-align: text-bottom;
+    }
+
+    /* 选中文字反色显示（选区功能） */
+    #mirror .m-sel {
+      background: var(--fg);
+      color: #000;
+      text-shadow: none;
+    }
+
+    #kb {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: transparent;
+      caret-color: transparent; /* 原生竖线隐藏，由镜像光标替代 */
+      font: inherit;
+      text-shadow: none;
+    }
+
+    /* 中文站名：大字号宽字距排印 */
+    .cn {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.45em;
+      color: var(--yellow);
+      text-shadow: 0 0 8px rgba(255, 233, 92, 0.35);
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ---------- 开机覆盖层：需要一次点击来解锁音频 ---------- */
+    #power {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: var(--bg);
+      cursor: pointer;
+      text-align: center;
+      padding: 24px;
+    }
+
+    #power .pwr-icon {
+      width: 74px;
+      height: 74px;
+      border: 2px solid var(--phos-dim);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 34px;
+      color: var(--phos-dim);
+      transition: all 0.3s ease;
+      box-shadow: 0 0 0 0 rgba(61, 255, 124, 0);
+    }
+
+    #power:hover .pwr-icon {
+      color: var(--fg);
+      border-color: var(--fg);
+      box-shadow: 0 0 26px rgba(255, 255, 255, 0.25);
+    }
+
+    #power .pwr-txt { font-size: 12px; letter-spacing: 0.2em; }
+    #power .pwr-sub { font-size: 12px; color: var(--fg-dim); letter-spacing: 0.1em; }
+
+    /* 开机瞬间的电子束闪光 */
+    #crt.booting #screen { animation: beam-on 0.55s ease-out, flicker 4.2s 0.55s infinite; }
+
+    /* 关机：亮度骤增 → 电子束收缩成一条亮线 → 熄灭成一个点 */
+    #crt.off {
+      pointer-events: none;
+      animation: beam-off 0.6s ease-in forwards;
+    }
+
+    @keyframes beam-off {
+      0%   { filter: brightness(1);   transform: scaleY(1);      opacity: 1; }
+      35%  { filter: brightness(2.2); transform: scaleY(1);      opacity: 1; }
+      75%  { filter: brightness(5);   transform: scaleY(0.012);  opacity: 1; }
+      92%  { filter: brightness(8);   transform: scaleY(0.004) scaleX(0.55); opacity: 1; }
+      100% { filter: brightness(9);   transform: scaleY(0.002) scaleX(0.3);  opacity: 0; }
+    }
+
+    @keyframes beam-on {
+      0%   { opacity: 0; transform: scaleY(0.005); filter: brightness(6); }
+      35%  { opacity: 1; transform: scaleY(0.005); filter: brightness(6); }
+      55%  { transform: scaleY(1); filter: brightness(2.2); }
+      100% { transform: scaleY(1); filter: brightness(1); }
+    }
+
+    /* ---------- 右上角固定按钮：静音 / 挂断 ---------- */
+    #ctrls {
+      position: fixed;
+      top: 12px;
+      right: 14px;
+      z-index: 30;
+      display: flex;
+      gap: 8px;
+    }
+
+    #ctrls button, #ctrls a {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+      font-family: inherit;
+      color: var(--fg-dim);
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid var(--fg-dim);
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+    }
+
+    #ctrls button:hover, #ctrls a:hover {
+      color: var(--fg);
+      border-color: var(--fg);
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.22);
+    }
+
+    /* ---------- DOS 蓝色状态栏 ---------- */
+    #statusbar {
+      flex-shrink: 0;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      padding: 3px 10px;
+      margin-top: 6px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      color: #e8e8e8;
+      background: var(--dos-blue);
+      user-select: none;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    #statusbar.on { display: flex; }
+
+    #statusbar .key {
+      color: var(--yellow);
+      font-weight: bold;
+      margin-right: 3px;
+    }
+
+    #statusbar .fill { flex: 1; }
+
+    #statusbar .right { color: #b8b8f0; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ---------- 手机端 ---------- */
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      #crt { padding: 14px 14px 16px; border-radius: 14px; box-shadow: 0 0 0 6px #16171c, 0 0 0 8px #0b0c0f, 0 14px 40px rgba(0, 0, 0, 0.85), inset 0 0 90px rgba(0, 0, 0, 0.9); }
+      #screen { font-size: 12px; }
+      #screen p.art { font-size: 12px; }
+      .cn { font-size: 12px; }
+      #power .pwr-txt { font-size: 12px; }
+    }
+
+    /* 用户偏好减少动态效果：关掉闪烁、滚纹与噪点动画 */
+    @media (prefers-reduced-motion: reduce) {
+      #screen, #mirror .m-cur { animation: none; }
+      #crt.booting #screen { animation: none; }
+      #band, #noise { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ctrls">
+    <button id="mute" type="button" title="静音 / 取消静音" aria-label="切换声音">🔊</button>
+    <a href="index.html" id="exit-link" title="挂断并返回现代模式" aria-label="挂断并返回现代模式">✕</a>
+  </div>
+
+  <div id="crt">
+    <div id="band" aria-hidden="true"></div>
+    <div id="glare" aria-hidden="true"></div>
+    <div id="noise" aria-hidden="true"></div>
+
+    <div id="screen" aria-live="polite"></div>
+
+    <div id="input-row">
+      <span id="prompt"></span><span id="input-wrap"><span id="mirror"><span id="mirror-inner"></span></span><input id="kb" type="text" autocomplete="off"
+        autocapitalize="off" spellcheck="false" aria-label="终端输入" /></span>
+    </div>
+
+    <div id="statusbar" aria-hidden="true">
+      <span><span class="key">F1</span>帮助</span>
+      <span><span class="key">Esc</span>退出复古模式</span>
+      <span class="fill"></span>
+      <span class="right" id="sb-right">PaperClip DOS v6.22</span>
+    </div>
+
+    <!-- 开机层：浏览器要求音频必须有用户手势才能播放 -->
+    <div id="power" role="button" tabindex="0" aria-label="接通电源，开机">
+      <div class="pwr-icon">⏻</div>
+      <div class="pwr-txt">PUSH POWER · 接通电源</div>
+      <div class="pwr-sub">PaperClip 486DX2/66 · 请戴耳机体验拨号音</div>
+    </div>
+  </div>
+
+  <script>
+    /* ============================================================
+       PaperClip BBS —— 早期拨号 BBS 终端模拟器
+       流程：开机自检 → Modem 拨号（WebAudio 合成拨号音/握手声）
+             → 登录（呼号）→ 主菜单（键盘指令交互）
+       全部本地运行，无任何后端；留言保存在 localStorage。
+       ============================================================ */
+    (function () {
+      "use strict";
+
+      var screen = document.getElementById("screen");
+      var crt = document.getElementById("crt");
+      var power = document.getElementById("power");
+      var inputRow = document.getElementById("input-row");
+      var promptEl = document.createElement("span"); // 复用节点：ask() 时填充
+      var kb = document.getElementById("kb");
+      var mirrorInner = document.getElementById("mirror-inner");
+      var statusbar = document.getElementById("statusbar");
+      var sbRight = document.getElementById("sb-right");
+
+      /* 状态栏右侧文字：随阶段更新（DOS / 拨号中 / 在线呼号 / 已离线） */
+      function sbSet(text) { if (sbRight) sbRight.textContent = text; }
+
+      /* ---------------- 块状光标：镜像层渲染 ----------------
+         真实 input 文字透明，镜像层同步显示内容，并把块状光标
+         插在真实插入点（selectionStart）上：方向键移动、点击定位、
+         拖选反显都能正确反映；输入时重建光标节点，打字期间常亮 */
+      function syncScroll() {
+        if (mirrorInner) mirrorInner.style.transform = "translateX(" + -(kb.scrollLeft || 0) + "px)";
+      }
+
+      function renderMirror() {
+        if (!mirrorInner) return;
+        var v = kb.value;
+        if (kb.type === "password") v = new Array(v.length + 1).join("*");
+        var s = kb.selectionStart == null ? v.length : kb.selectionStart;
+        var e = kb.selectionEnd == null ? s : kb.selectionEnd;
+        mirrorInner.textContent = "";
+        if (s > 0) mirrorInner.appendChild(document.createTextNode(v.slice(0, s)));
+        if (e > s) {
+          var sel = document.createElement("span");
+          sel.className = "m-sel";
+          sel.textContent = v.slice(s, e);
+          mirrorInner.appendChild(sel);
+        }
+        var cur = document.createElement("span");
+        cur.className = "m-cur";
+        mirrorInner.appendChild(cur);
+        if (e < v.length) mirrorInner.appendChild(document.createTextNode(v.slice(e)));
+        syncScroll();
+      }
+
+      kb.addEventListener("input", renderMirror);
+      kb.addEventListener("keyup", renderMirror);
+      kb.addEventListener("click", renderMirror);
+      kb.addEventListener("scroll", syncScroll);
+      document.addEventListener("selectionchange", function () {
+        if (document.activeElement === kb) renderMirror();
+      });
+
+      var history = [];       // 输入历史（↑/↓ 翻阅）
+      var histPos = -1;
+      var muted = false;
+      var dialDone = false;   // 拨号阶段按任意键可跳过
+      var skipFlag = false;   // 置位后：type() 立即补完，dialSleep() 提前唤醒
+      var inDial = false;     // 是否处于动画阶段（开机/拨号，允许跳过）
+      var leaving = false;    // 正在退出复古模式（Esc），屏蔽一切输入
+      var bbsEnded = false;   // BBS 已挂断（区别于退出页面）
+
+      /* ---------------- 音频：WebAudio 合成 modem 音效 ---------------- */
+      var ac = null, master = null;
+
+      function audioInit() {
+        if (ac) return;
+        try {
+          ac = new (window.AudioContext || window.webkitAudioContext)();
+          master = ac.createGain();
+          master.gain.value = 0.6;
+          master.connect(ac.destination);
+        } catch (e) { ac = null; }
+      }
+
+      function beep(freq, dur, gain, type, when) {
+        if (!ac || muted) return;
+        var t = when || ac.currentTime;
+        var o = ac.createOscillator();
+        var g = ac.createGain();
+        o.type = type || "sine";
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(gain || 0.05, t + 0.012);
+        g.gain.setValueAtTime(gain || 0.05, t + dur - 0.02);
+        g.gain.linearRampToValueAtTime(0, t + dur);
+        o.connect(g); g.connect(master);
+        o.start(t); o.stop(t + dur + 0.02);
+        trackSfx(o);
+      }
+
+      /* 活跃音源登记：双击跳过拨号时，已排期但还没播完的
+         拨号音/握手噪声需要立刻停掉，不能让画面和声音脱节 */
+      var liveSfx = [];
+      function trackSfx(node) {
+        liveSfx.push(node);
+        node.onended = function () {
+          var i = liveSfx.indexOf(node);
+          if (i !== -1) liveSfx.splice(i, 1);
+        };
+      }
+      function stopAllSfx() {
+        liveSfx.forEach(function (n) {
+          try { n.stop(); } catch (e) {}
+        });
+        liveSfx = [];
+      }
+
+      /* 拨号音：350Hz + 440Hz 双音（北美标准拨号音） */
+      function dialTone(dur) {
+        if (!ac || muted) return;
+        var t = ac.currentTime;
+        beep(350, dur, 0.045, "sine", t);
+        beep(440, dur, 0.045, "sine", t);
+      }
+
+      /* DTMF 拨号：每个数字一对频率，短促连发 */
+      var DTMF = {
+        "1": [697, 1209], "2": [697, 1336], "3": [697, 1477],
+        "4": [770, 1209], "5": [770, 1336], "6": [770, 1477],
+        "7": [852, 1209], "8": [852, 1336], "9": [852, 1477],
+        "0": [941, 1336]
+      };
+      function dialDigits(numStr) {
+        if (!ac || muted) return;
+        var t = ac.currentTime + 0.1;
+        for (var i = 0; i < numStr.length; i++) {
+          var f = DTMF[numStr[i]];
+          if (!f) continue;
+          beep(f[0], 0.09, 0.05, "sine", t);
+          beep(f[1], 0.09, 0.05, "sine", t);
+          t += 0.16;
+        }
+        return t - ac.currentTime;
+      }
+
+      /* 握手噪音：白噪声过带通滤波器，频率来回扫，模拟应答/协商 */
+      function handshake(dur) {
+        if (!ac || muted) return;
+        var t = ac.currentTime;
+        var len = Math.floor(ac.sampleRate * dur);
+        var buf = ac.createBuffer(1, len, ac.sampleRate);
+        var d = buf.getChannelData(0);
+        for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        var src = ac.createBufferSource();
+        src.buffer = buf;
+        var bp = ac.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.Q.value = 6;
+        bp.frequency.setValueAtTime(1200, t);
+        bp.frequency.linearRampToValueAtTime(2400, t + dur * 0.4);
+        bp.frequency.linearRampToValueAtTime(900, t + dur * 0.8);
+        bp.frequency.linearRampToValueAtTime(1800, t + dur);
+        var g = ac.createGain();
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.linearRampToValueAtTime(0.05, t + 0.2);
+        g.gain.setValueAtTime(0.05, t + dur - 0.3);
+        g.gain.linearRampToValueAtTime(0, t + dur);
+        src.connect(bp); bp.connect(g); g.connect(master);
+        src.start(t);
+        trackSfx(src);
+        /* 混入几声 2100Hz 应答音 */
+        beep(2100, 0.5, 0.04, "sine", t + 0.1);
+        beep(1300, 0.35, 0.04, "sine", t + dur * 0.55);
+        beep(2100, 0.3, 0.035, "sine", t + dur - 0.4);
+      }
+
+      /* 按键咔哒：打字时极轻的一声 */
+      function click() { beep(1350, 0.018, 0.016, "square"); }
+
+      /* 消息提示音：菜单出现的短促 "叮" */
+      function chime() { beep(880, 0.08, 0.04); beep(1320, 0.1, 0.035, "sine", ac ? ac.currentTime + 0.09 : 0); }
+
+      var muteBtn = document.getElementById("mute");
+      muteBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        muted = !muted;
+        muteBtn.textContent = muted ? "🔇" : "🔊";
+        if (master) master.gain.value = muted ? 0 : 0.6;
+      });
+
+      /* ---------------- 输出：打字机 ---------------- */
+      function scrollBottom() { screen.scrollTop = screen.scrollHeight; }
+
+      /* print：整行立即出现（用于高速滚动的系统报文） */
+      function print(text, cls) {
+        var p = document.createElement("p");
+        if (cls) p.className = cls;
+        p.textContent = text === undefined ? "" : text;
+        screen.appendChild(p);
+        scrollBottom();
+        return p;
+      }
+
+      /* type：逐字打印。返回 Promise；skipFlag 置位时立即补完整行 */
+      var typing = null;   // 当前正在打印的 p 节点
+      var curJob = null;   // 当前打印任务（skip 时立即补完用）
+      function type(text, cls, cps) {
+        return new Promise(function (resolve) {
+          var p = print("", cls);
+          typing = p;
+          var i = 0;
+          var full = String(text);
+          var job = {
+            p: p, full: full,
+            finish: function () {
+              p.textContent = full;
+              typing = null; curJob = null;
+              scrollBottom();
+              resolve();
+            }
+          };
+          curJob = job;
+          var step = function () {
+            if (skipFlag || typing !== p) { job.finish(); return; }
+            /* 一次吐 1-2 字，速度带随机抖动，模拟串口吞吐不均 */
+            p.textContent = full.slice(0, i += (Math.random() < 0.3 ? 2 : 1));
+            scrollBottom();
+            if (i < full.length) {
+              setTimeout(step, (cps || 26) + Math.random() * 26);
+            } else {
+              typing = null; curJob = null;
+              resolve();
+            }
+          };
+          step();
+        });
+      }
+
+      function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+      /* 拨号阶段的等待：双击屏幕可跳过（skipFlag 提前唤醒） */
+      function dialSleep(ms) {
+        return new Promise(function (r) {
+          var t0 = Date.now();
+          var iv = setInterval(function () {
+            if (skipFlag || Date.now() - t0 >= ms) { clearInterval(iv); r(); }
+          }, 60);
+        });
+      }
+
+      /* ---------------- 输入：ask() 返回 Promise ---------------- */
+      function ask(promptText, masked) {
+        return new Promise(function (resolve) {
+          promptEl.textContent = promptText;
+          var old = document.getElementById("prompt");
+          if (old) old.replaceWith(promptEl);
+          else inputRow.insertBefore(promptEl, kb);
+          promptEl.id = "prompt";
+          kb.type = masked ? "password" : "text";
+          kb.value = "";
+          inputRow.classList.add("on");
+          histPos = -1;
+          kb.focus();
+          renderMirror();
+          kb.onkeydown = function (e) {
+            if (e.key === "Enter") {
+              var val = kb.value.trim();
+              kb.onkeydown = null;
+              inputRow.classList.remove("on");
+              /* 回显用户输入（密码输入打星号），随后隐藏输入行 */
+              var echo = masked ? new Array(val.length + 1).join("*") : val;
+              print(promptText + echo, "wht");
+              if (val) { history.push(val); if (history.length > 40) history.shift(); }
+              resolve(val);
+            } else if (e.key === "ArrowUp") {
+              if (!history.length) return;
+              histPos = histPos === -1 ? history.length - 1 : Math.max(0, histPos - 1);
+              kb.value = history[histPos];
+              e.preventDefault();
+            } else if (e.key === "ArrowDown") {
+              if (histPos === -1) return;
+              histPos++;
+              if (histPos >= history.length) { histPos = -1; kb.value = ""; }
+              else kb.value = history[histPos];
+              e.preventDefault();
+            } else {
+              click();
+            }
+          };
+        });
+      }
+
+      /* 点屏幕任意处聚焦输入框（手机端拉起键盘） */
+      crt.addEventListener("click", function () {
+        if (inputRow.classList.contains("on")) kb.focus();
+      });
+
+      /* 退出复古模式：CRT 关机动画（电子束收缩）→ 回现代模式主页 */
+      function exitRetro() {
+        if (leaving) return;
+        leaving = true;
+        bbsEnded = true;
+        inputRow.classList.remove("on");
+        crt.classList.remove("booting");
+        crt.classList.add("off");
+        if (ac && !muted) beep(70, 0.14, 0.06, "sine");  /* 断电闷响 */
+        setTimeout(function () { location.href = "index.html"; }, 620);
+      }
+
+      /* Esc / ✕ = 关机退出；F1 = 帮助（跟随当前阶段输出） */
+      document.addEventListener("keydown", function (e) {
+        if (leaving) return;
+        if (e.key === "Escape") {
+          exitRetro();
+        } else if (e.key === "F1" && inputRow.classList.contains("on")) {
+          e.preventDefault();
+          kb.value = "help";
+          kb.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+        }
+      });
+
+      var exitLink = document.getElementById("exit-link");
+      if (exitLink) exitLink.addEventListener("click", function (e) {
+        e.preventDefault();
+        exitRetro();
+      });
+
+      /* ---------------- BBS 内容 ---------------- */
+      var handle = "guest";
+
+      /* 横幅：方块字点阵由程序拼装，保证等宽对齐不出错 */
+      var FONT = {
+        P: ["████", "█  █", "████", "█   ", "█   "],
+        A: ["████", "█  █", "████", "█  █", "█  █"],
+        E: ["████", "█   ", "███ ", "█   ", "████"],
+        R: ["████", "█  █", "████", "█ █ ", "█  █"],
+        C: ["████", "█   ", "█   ", "█   ", "████"],
+        L: ["█   ", "█   ", "█   ", "█   ", "████"],
+        I: ["███ ", " █  ", " █  ", " █  ", "███ "],
+      };
+      function asciiArt(word) {
+        var rows = ["", "", "", "", ""];
+        for (var k = 0; k < word.length; k++) {
+          var g = FONT[word.charAt(k)];
+          if (!g) continue;
+          /* 像素字体中 █ 为全角（2 列），补位空格须用全角空格才能对齐 */
+          for (var r = 0; r < 5; r++) rows[r] += g[r].replace(/ /g, "\u3000") + "\u3000";
+        }
+        return rows.join("\n");
+      }
+      var BANNER = asciiArt("PAPERCLIP");
+
+      /* 菜单框线：按"渲染列宽"生成（像素字体下 ASCII=1 列、全角=2 列），
+         保证框线在像素等宽字体下严格对齐 */
+      function dispCols(s) {
+        var w = 0;
+        for (var i = 0; i < s.length; i++) w += s.charCodeAt(i) > 0xff ? 2 : 1;
+        return w;
+      }
+      function padCols(s, n) {
+        while (dispCols(s) < n) s += " ";
+        return s;
+      }
+      function rep(s, n) { return new Array(n + 1).join(s); }
+
+      function buildMenu() {
+        var items = [
+          ["[1] 站长档案", "who is PaperClip"],
+          ["[2] 我的轨迹", "时间线・Timeline"],
+          ["[3] 技能档案", "ASCII 进度条"],
+          ["[4] 布告栏", "本站公告 / 友情链接"],
+          ["[5] 留言板", "写下你的裂痕留言"],
+          ["[6] 在线用户", "看看谁在站上"],
+          ["[7] 系统时间", "报时 + 机器档案"],
+        ];
+        var W = 42;  // 框内渲染列宽
+        var lines = ["┌" + rep("─", W / 2) + "┐"];
+        lines.push("│" + padCols("        主 菜 单・MAIN BOARD", W) + "│");
+        lines.push("├" + rep("─", W / 2) + "┤");
+        items.forEach(function (it) {
+          lines.push("│" + padCols("  " + padCols(it[0], 16) + it[1], W) + "│");
+        });
+        lines.push("│" + padCols("", W) + "│");
+        lines.push("│" + padCols("  help 帮助   clear 清屏   exit 挂断", W) + "│");
+        lines.push("└" + rep("─", W / 2) + "┘");
+        return lines.join("\n");
+      }
+      var MENU = buildMenu();
+
+      function bar(pct, width) {
+        width = width || 24;
+        var on = Math.round(pct / 100 * width);
+        var s = "[";
+        for (var i = 0; i < width; i++) s += i < on ? "█" : "░";
+        return s + "] " + (pct + "%");
+      }
+
+      function pad(s, n) {
+        s = String(s);
+        var w = 0;
+        for (var i = 0; i < s.length; i++) w += s.charCodeAt(i) > 255 ? 2 : 1;
+        while (w < n) { s += " "; w++; }
+        return s;
+      }
+
+      /* ---------------- 各板块 ---------------- */
+      /* 优先使用 loadSiteData() 同步来的真实主页数据，抓取失败时回退内置内容 */
+      function cmdAbout() {
+        var rows = [["── 站长档案 ─────────────────────────────", "amb"]];
+        if (siteData.bio || siteData.location) {
+          if (siteData.location) rows.push(["  " + siteData.location, "cyn"]);
+          if (siteData.bio) rows.push(["  " + siteData.bio, ""]);
+          if (siteData.version) rows.push(["  站点版本 " + siteData.version + " · 99% Vibe Coding", "dim"]);
+        } else {
+          rows.push(["  呼号   PaperClip（回形针）", ""]);
+          rows.push(["  坐标   中国大陆 · 在校学生", ""]);
+          rows.push(["  爱好   折腾网页 / Minecraft / 终末地", ""]);
+          rows.push(["  信条   先动手做出来，再慢慢学好", ""]);
+        }
+        rows.push(["", "dim"]);
+        rows.push(["  GitHub  github.com/TUSI-ISUT", "cyn"]);
+        rows.push(["  B站     Paper_Clip_zero", "cyn"]);
+        rows.push(["", "dim"]);
+        return rows;
+      }
+
+      function cmdTimeline() {
+        var rows = [["── 我的轨迹 · 同步自主页 ────────────────", "amb"]];
+        var list = siteData.timeline;
+        if (list && list.length) {
+          list.forEach(function (t) {
+            rows.push(["  [" + t.period + "]  " + t.title, ""]);
+            if (t.role) rows.push(["          " + t.role, "cyn"]);
+            if (t.desc) rows.push(["          " + t.desc, "dim"]);
+          });
+        } else {
+          rows.push(["  [现在]   在校学生 · 边学边玩", ""]);
+          rows.push(["  [本站]   PaperClip 个人主页", ""]);
+          rows.push(["  [兴趣]   Minecraft · 玩家/服主", ""]);
+          rows.push(["  [兴趣]   明日方舟：终末地 · 玩家", ""]);
+          rows.push(["  [持续]   正在学 JavaScript · Python", ""]);
+          rows.push(["  （离线兜底数据：联网访问本站可看到最新轨迹）", "dim"]);
+        }
+        rows.push(["", "dim"]);
+        return rows;
+      }
+
+      function cmdSkills() {
+        var rows = [["── 技能档案 · 同步自主页 ────────────────", "amb"]];
+        var list = siteData.skills;
+        if (list && list.length) {
+          list.forEach(function (s) {
+            rows.push(["  " + pad(s.name, 20) + bar(s.pct), "cyn"]);
+          });
+        } else {
+          rows.push(["  " + pad("HTML / CSS", 20) + bar(65), "cyn"]);
+          rows.push(["  " + pad("JavaScript", 20) + bar(40), "cyn"]);
+          rows.push(["  " + pad("AI辅助编程", 20) + bar(80), "cyn"]);
+          rows.push(["  （离线兜底数据）", "dim"]);
+        }
+        rows.push(["", "dim"]);
+        return rows;
+      }
+
+      /* 布告栏：静态公告 + MC 服务器实时状态查询 */
+      async function cmdBoard() {
+        await renderLines([
+          ["── 布告栏 · BULLETIN ────────────────────", "amb"],
+          ["  ▸ 本站由 Cloudflare Pages 提供骨干网络", ""],
+          ["    （比 1997 年的 33.6k 快了大约一百万倍）", "dim"],
+          ["  ▸ QQ 交流群：1046086485（现代模式 minecraft.html 可一键加群）", "dim"],
+          ["", "dim"],
+          ["── Minecraft 服务器 · 实时状态 ──────────", "amb"],
+          ["  正在连线查询 " + MC_HOST + ":" + MC_PORT + " ...", "dim"],
+        ], true);
+
+        var rows;
+        try {
+          var r = await fetchMcStatus();
+          if (r.status === "online") {
+            var motd = (typeof r.pureMotd === "string" && r.pureMotd) || mcMotdText(r.motd);
+            rows = [
+              ["  ▸ 状态   在线", "cyn"],
+              ["  ▸ 版本   " + (r.version || "未知"), ""],
+              ["  ▸ 玩家   " + ((r.players && r.players.online) != null ? r.players.online : "?") +
+                " / " + ((r.players && r.players.max) != null ? r.players.max : "?"), ""],
+            ];
+            if (motd) rows.push(["  ▸ MOTD  " + motd.replace(/\n+/g, " "), "dim"]);
+          } else {
+            rows = [["  ▸ 状态   离线（服务器又炸了，改天再来）", "err"]];
+          }
+        } catch (e) {
+          rows = [["  ▸ 查询失败，接口不可达（也许你的电话线松了）", "err"]];
+        }
+        rows.push(["", "dim"]);
+        await renderLines(rows, true);
+
+        await renderLines([
+          ["  ▸ 联络站长：", ""],
+          ["    GitHub  github.com/TUSI-ISUT", "cyn"],
+          ["    B站     Paper_Clip_zero", "cyn"],
+          ["", "dim"],
+          ["  ── 时代广告 ──", "dim"],
+          ["  \"486DX2/66 带 8MB 内存，跑 Win95 贼快！\"", "dim"],
+          ["  \"最新游戏《仙剑奇侠传》到货，4 张软盘～\"", "dim"],
+          ["", "dim"],
+        ], true);
+      }
+
+      /* ---------------- 留言板（localStorage） ---------------- */
+      var MSG_KEY = "bbs_msgs";
+
+      function loadMsgs() {
+        try { return JSON.parse(localStorage.getItem(MSG_KEY)) || []; }
+        catch (e) { return []; }
+      }
+
+      function cmdMsg() {
+        return [
+          ["── 留言板 · ECHO WALL ───────────────────", "amb"],
+          ["  留言保存在你这台\"终端\"的本地磁带上", "dim"],
+          ["  （localStorage），只有你自己能看到。", "dim"],
+          ["  指令： msg list 查看留言 · 直接输入文字留言", "dim"],
+          ["", "dim"],
+        ];
+      }
+
+      function msgList() {
+        var msgs = loadMsgs();
+        if (!msgs.length) {
+          return [["  磁带还是空白的，来做第一个留言的人吧。", "dim"]];
+        }
+        var out = [["── 磁带上的留言（最近 10 条）──", "amb"]];
+        msgs.slice(-10).forEach(function (m) {
+          var d = new Date(m.t);
+          var stamp = d.getFullYear() + "-" +
+            ("0" + (d.getMonth() + 1)).slice(-2) + "-" +
+            ("0" + d.getDate()).slice(-2) + " " +
+            ("0" + d.getHours()).slice(-2) + ":" +
+            ("0" + d.getMinutes()).slice(-2);
+          out.push(["  " + stamp + "  " + m.by + ":", "cyn"]);
+          out.push(["    " + m.text, ""]);
+        });
+        out.push(["", "dim"]);
+        return out;
+      }
+
+      function msgSave(text) {
+        var msgs = loadMsgs();
+        msgs.push({ t: Date.now(), by: handle, text: text.slice(0, 120) });
+        if (msgs.length > 50) msgs = msgs.slice(-50);
+        try { localStorage.setItem(MSG_KEY, JSON.stringify(msgs)); } catch (e) {}
+      }
+
+      /* ---------------- 在线用户（趣味假数据） ---------------- */
+      function cmdUsers() {
+        var guests = ["StarDust", "猫饭", "DeepBlue", "RAM_486", "电话线精灵"];
+        var pick = guests.sort(function () { return Math.random() - 0.5; }).slice(0, 2 + Math.floor(Math.random() * 3));
+        var rows = [
+          ["── 在线用户 · WHO ───────────────────────", "amb"],
+          ["  " + pad("呼号", 14) + pad("节点", 8) + "状态", "dim"],
+        ];
+        rows.push(["  " + pad("SysOp(PaperClip)", 14) + pad("#0", 8) + "管着站", "cyn"]);
+        pick.forEach(function (n, i) {
+          rows.push(["  " + pad(n, 14) + pad("#" + (i + 1), 8) + "灌水中", ""]);
+        });
+        rows.push(["  " + pad(handle, 14) + pad("#" + (pick.length + 1), 8) + "刚上线", "amb"]);
+        rows.push(["", "dim"]);
+        rows.push(["  共 " + (pick.length + 2) + " 人在线 · 33600 bps · 载波稳定", "dim"]);
+        rows.push(["", "dim"]);
+        return rows;
+      }
+
+      /* ---------------- 系统时间 ---------------- */
+      function cmdTime() {
+        var d = new Date();
+        var s = d.getFullYear() + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日 " +
+          ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) + ":" +
+          ("0" + d.getSeconds()).slice(-2);
+        return [
+          ["── 系统时间 · CLOCK ─────────────────────", "amb"],
+          ["  现在时间  " + s, "wht"],
+          ["", "dim"],
+          ["  ── 本站主机档案 ──", "dim"],
+          ["  CPU    486DX2-66 · 超频到 80MHz（激进）", ""],
+          ["  RAM    8MB（玩 DOOM 够用了）", ""],
+          ["  硬盘   540MB · 剩余 12MB（又满了）", ""],
+          ["  Modem  悦音 33.6kbps · 外置 · 会唱歌", ""],
+          ["", "dim"],
+        ];
+      }
+
+      var FORTUNES = [
+        "电话线里传来遥远的应答声，那是整个世界在敲门。",
+        "今天的流量很畅，没有人拿起分机听筒。",
+        "传说在凌晨三点拨号，能连上一台不存在的 BBS。",
+        "SysOp 提示：回帖前请先阅读 NETIQUETTE.DOC。",
+        "你听到的每一声\"滋——咔\"，都是一次热情的握手。",
+        "RAM 不够的时候，就多想想办法，少想点内存。",
+      ];
+
+      /* ============================================================
+         真实站点数据同步：板块内容不再写死，开机时从站内文件抓取
+         - index.html → 时间线(.tl-item)、技能(.skill)、简介(.bio/.location)
+         - main.js    → 站点版本号 SITE_VERSION、背景音乐曲单
+         - minecraft.html 同款 minebbs API → MC 服务器实时状态
+         抓取失败（本地 file:// 打开等）时自动沿用各板块内置兜底内容。
+         ============================================================ */
+      var MC_HOST = "xm.rainplay.cn";
+      var MC_PORT = "15991";
+
+      var siteData = {
+        timeline: null,   // [{period,title,role,desc}]
+        skills: null,     // [{name,pct}]
+        bio: null,
+        location: null,
+        version: "",
+        tracks: null,     // [曲名...]
+      };
+
+      function loadSiteData() {
+        function txt(url) {
+          return fetch(url, { cache: "no-cache" }).then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.text();
+          });
+        }
+        return Promise.all([txt("index.html"), txt("main.js")])
+          .then(function (res) {
+            var doc = new DOMParser().parseFromString(res[0], "text/html");
+
+            var tls = doc.querySelectorAll(".tl-item");
+            if (tls.length) {
+              siteData.timeline = Array.prototype.map.call(tls, function (el) {
+                return {
+                  period: (el.querySelector(".period") || {}).textContent || "",
+                  title: (el.querySelector("h3") || {}).textContent || "",
+                  role: (el.querySelector(".role") || {}).textContent || "",
+                  desc: (el.querySelector("p") || {}).textContent || "",
+                };
+              });
+            }
+
+            var sks = doc.querySelectorAll(".skill");
+            if (sks.length) {
+              siteData.skills = Array.prototype.map.call(sks, function (el) {
+                return {
+                  name: (el.querySelector(".skill-head b") || {}).textContent || "",
+                  pct: Math.round(parseFloat((el.querySelector(".skill-head span") || {}).textContent) || 0),
+                };
+              });
+            }
+
+            var bio = doc.querySelector(".bio");
+            if (bio) siteData.bio = bio.textContent.replace(/\s+/g, " ").trim();
+            var loc = doc.querySelector(".location");
+            if (loc) siteData.location = loc.textContent.replace(/\s+/g, " ").trim();
+
+            var vm = res[1].match(/SITE_VERSION\s*=\s*"([^"]+)"/);
+            if (vm) siteData.version = vm[1];
+
+            /* 背景音乐曲单（site 组，即终末地音乐） */
+            var pm = res[1].match(/site:\s*\{[\s\S]*?tracks:\s*\[([\s\S]*?)\]/);
+            if (pm) {
+              var names = [], re = /"([^"]+)"/g, m2;
+              while ((m2 = re.exec(pm[1]))) names.push(m2[1]);
+              if (names.length) siteData.tracks = names;
+            }
+
+            /* 曲单到位后同步 DOS 磁盘上的 SONGS.TXT */
+            if (siteData.tracks) {
+              DISK["C:\\MUSIC"][0].c = [
+                "站点 BGM 曲单（明日方舟：终末地 · 共 " + siteData.tracks.length + " 首）：",
+                siteData.tracks.join(" · "),
+                "完整版在现代模式主页右下角的点唱机里。",
+              ];
+            }
+          })
+          .catch(function () { /* 抓取失败：沿用内置兜底数据，功能不受影响 */ });
+      }
+
+      /* MC 服务器实时状态查询（与 minecraft.html 共用 minebbs 接口） */
+      function fetchMcStatus() {
+        return fetch(
+          "https://motd.minebbs.com/api/status?ip=" + encodeURIComponent(MC_HOST) +
+          "&port=" + encodeURIComponent(MC_PORT)
+        ).then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        });
+      }
+
+      /* minebbs 的 motd 是 MC JSON 文本组件，递归拍平成纯文本 */
+      function mcMotdText(c) {
+        if (!c) return "";
+        var t = c.text || "";
+        if (c.extra && c.extra.length) {
+          for (var i = 0; i < c.extra.length; i++) t += mcMotdText(c.extra[i]);
+        }
+        return t;
+      }
+
+
+      /* ---------------- 指令解析 ---------------- */
+      function renderLines(rows, typed) {
+        var chain = Promise.resolve();
+        rows.forEach(function (row) {
+          chain = chain.then(function () {
+            if (typed) return type(row[0], row[1]);
+            print(row[0], row[1]);
+            return sleep(18);
+          });
+        });
+        return chain;
+      }
+
+      async function dispatch(raw) {
+        var cmd = raw.toLowerCase();
+
+        /* 留言：非指令的自由文本直接入库（长度>1 且不含空格指令特征时） */
+        var msgCmd = cmd.match(/^msg\s+([\s\S]+)/);
+
+        if (cmd === "help" || cmd === "h" || cmd === "?" || cmd === "菜单") {
+          chime();
+          print(MENU, "dim");
+        } else if (cmd === "1" || cmd === "about" || cmd === "whoami" || cmd === "站长") {
+          await renderLines(cmdAbout(), true);
+        } else if (cmd === "2" || cmd === "trace" || cmd === "timeline" || cmd === "轨迹") {
+          await renderLines(cmdTimeline(), true);
+        } else if (cmd === "3" || cmd === "skills" || cmd === "技能") {
+          await renderLines(cmdSkills(), true);
+        } else if (cmd === "4" || cmd === "board" || cmd === "bulletin" || cmd === "布告") {
+          await cmdBoard();
+        } else if (cmd === "5" || cmd === "msg" || cmd === "留言") {
+          await renderLines(cmdMsg(), true);
+        } else if (msgCmd && msgCmd[1] === "list") {
+          await renderLines(msgList(), true);
+        } else if (msgCmd && msgCmd[1]) {
+          msgSave(msgCmd[1]);
+          chime();
+          await renderLines([["  ▸ 已写入磁带：" + msgCmd[1], "amb"]], true);
+        } else if (cmd === "6" || cmd === "who" || cmd === "users" || cmd === "在线") {
+          await renderLines(cmdUsers(), true);
+        } else if (cmd === "7" || cmd === "time" || cmd === "date" || cmd === "时间") {
+          await renderLines(cmdTime(), true);
+        } else if (cmd === "fortune" || cmd === "签") {
+          await type(FORTUNES[Math.floor(Math.random() * FORTUNES.length)], "cyn");
+          print("");
+        } else if (cmd === "clear" || cmd === "cls") {
+          screen.innerHTML = "";
+        } else if (cmd === "exit" || cmd === "quit" || cmd === "bye" || cmd === "x" || cmd === "挂断" || cmd === "下线") {
+          await hangup();
+        } else if (raw.length >= 2 && cmd.charAt(0) !== "/" ) {
+          /* 自由文本 → 视作留言，模拟老 BBS 的聊天/留言习惯 */
+          msgSave(raw);
+          await type("  （已悄悄帮你写进留言板，msg list 可以查看）", "dim");
+          print("");
+        } else {
+          await type("未知指令：" + raw + "   输入 help 查看指令表", "err");
+          print("");
+        }
+      }
+
+      /* ---------------- BBS 主循环 ---------------- */
+      async function bbsLoop() {
+        while (!bbsEnded && !leaving) {
+          var raw = await ask("BBS> ");
+          if (bbsEnded || leaving) break;
+          if (!raw) continue;
+          await dispatch(raw);
+        }
+      }
+
+      /* 挂断：保存设置 → 挂断音 → NO CARRIER → 返回 DOS（不退出页面） */
+      async function hangup() {
+        if (bbsEnded) return;
+        bbsEnded = true;
+        inputRow.classList.remove("on");
+        await type("正在保存设置... OK", "dim");
+        await sleep(350);
+        await type("正在挂断电话线...", "dim");
+        if (ac && !muted) beep(480, 0.7, 0.05, "sine");
+        await sleep(750);
+        print("NO CARRIER", "err");
+        await sleep(600);
+        sbSet("C:\\BBS · 已离线");
+        await type("感谢上站，" + handle + " 。正在返回 DOS ...", "dim");
+        await sleep(400);
+      }
+
+      /* ============================================================
+         bbs.exe 程序本体：拨号 → 横幅 → 登录 → 菜单循环
+         ============================================================ */
+      async function runBBS() {
+        bbsEnded = false;
+        inDial = true;
+        sbSet("正在拨号 · 33600 bps");
+
+        await dialSleep(400);
+        await type("正在初始化调制解调器 ...", "amb");
+        await dialSleep(450);
+        print("ATZ", "wht");
+        dialTone(1.3);
+        await dialSleep(1400);
+        print("OK", "dim");
+        var number = "057188881997";
+        print("ATDT " + number, "wht");
+        var dialDur = dialDigits(number) || 1.6;
+        await dialSleep(dialDur * 1000 + 500);
+
+        /* 漫长的等待……回程音与握手 */
+        await dialSleep(900);
+        handshake(4.2);
+        await dialSleep(1500);
+        print("正在协商载波 ...", "dim");
+        await dialSleep(1600);
+        print("CONNECT 33600/ARQ/V90/LAPM/V42BIS", "amb");
+        await dialSleep(500);
+        print("载波稳定 · 数据链路已建立", "dim");
+        print("");
+        await dialSleep(400);
+
+        /* 欢迎 ASCII + 中文站名 */
+        print(BANNER, "art amb");
+        await dialSleep(300);
+        print("回 形 针 电 波 站", "cn");
+        print("  ── PAPERCLIP BBS · 1997 · 电话线拨号 · 节点 #1 ──", "dim");
+        print("");
+        chime();
+        await type("Welcome to PaperClip BBS! 本站现有 6 个板块在线。", "wht");
+        print("");
+        await type("你是从电话线那头来的新朋友吗？报上呼号吧～", "cyn");
+        print("");
+
+        /* 跳过机制只服务动画阶段，登录起恢复正常节奏 */
+        inDial = false;
+        dialDone = false;
+        skipFlag = false;
+
+        /* 登录：老用户留空即可找回上次呼号，否则分配临时呼号 */
+        var saved = null;
+        try { saved = localStorage.getItem("bbs_handle"); } catch (e) {}
+        if (saved) print("(检测到旧呼号存档 " + saved + " ，直接回车即可找回)", "dim");
+        var name = await ask("呼号(HANDLE): ");
+        if (bbsEnded || leaving) return;
+        handle = name || saved || "guest" + Math.floor(100 + Math.random() * 900);
+        try { localStorage.setItem("bbs_handle", handle); } catch (e) {}
+        sbSet("在线 · " + handle + " · 33600 bps");
+        await type("呼号确认：" + handle + " · 正在核验权限 ...", "dim");
+        await sleep(500);
+        print("权限等级：普通用户（1 级） · 上站次数：1", "dim");
+        print("");
+        chime();
+        await type("上站成功！欢迎回来，" + handle + "。这是你的菜单：", "amb");
+        print("");
+        print(MENU, "dim");
+        print("");
+
+        await bbsLoop();
+      }
+
+      /* ============================================================
+         DOS 命令行：虚拟文件系统 + 内部命令
+         ============================================================ */
+      /* 磁盘：目录用 d:true，文本文件用 c:（内容行数组），其余为二进制 */
+      /* README.TXT 的双线框按渲染列宽生成（全角框字符占 2 列），
+         手写字符串在像素字体下右边框必然错位 */
+      var README_TXT = [
+        "╔" + rep("═", 19) + "╗",
+        "║" + padCols("  PaperClip 的电脑・README.TXT", 38) + "║",
+        "╚" + rep("═", 19) + "╝",
+        "",
+        " 这台 486 是 PaperClip 的复古玩具机。",
+        "",
+        " 1. 输入 bbs 运行 BBS.EXE，拨号上站",
+        " 2. 输入 dir 看看硬盘里还藏了什么",
+        " 3. 输入 ping 查 MC 服务器在不在线",
+        " 4. 输入 mem 检查 640K 内存够不够用",
+        "",
+        " ※ 1997 年最好的上网方式：电话线 + 耐心。",
+      ];
+      var DISK = {
+        "C:\\": [
+          { n: "BBS",         d: true, t: "06-12-97  8:45p" },
+          { n: "DOS",         d: true, t: "05-30-97  9:15a" },
+          { n: "GAMES",       d: true, t: "07-02-97  10:02p" },
+          { n: "MUSIC",       d: true, t: "07-20-97  11:40p" },
+          { n: "README.TXT",   s: 2048, t: "06-12-97  9:17p", c: README_TXT },
+          { n: "AUTOEXEC.BAT", s: 318, t: "05-30-97  9:20p", c: [
+            "@ECHO OFF",
+            "PROMPT=$P$G",
+            "PATH C:\\DOS;C:\\BBS;C:\\GAMES",
+            "SET BLASTER=A220 I5 D1 T4",
+            "LH C:\\DOS\\MOUSE.COM",
+            "LH C:\\DOS\\SMARTDRV.EXE 2048",
+            "ECHO 准备就绪。祝上网愉快！",
+          ] },
+          { n: "COMMAND.COM",  s: 93890, t: "05-30-97  9:20a" },
+        ],
+        "C:\\BBS": [
+          { n: "BBS.EXE",   s: 48640, t: "06-12-97  8:45p" },
+          { n: "SYSOP.TXT", s: 1024, t: "06-12-97  8:50p", c: [
+            "SysOp = PaperClip（回形针）",
+            "在校学生 · 边学边玩 · 折腾网页/MC/终末地。",
+            "上站指南：报名用呼号，灌水要文明，",
+            "别占用电话线太久了，你妈要用打市话。",
+          ] },
+          { n: "MODEM.LOG", s: 41, t: "08-30-97  3:12a", c: [
+            "08-30-97 03:12  CONNECT 33600 (最后一次握手)",
+          ] },
+        ],
+        "C:\\DOS": [
+          { n: "HIMEM.SYS",    s: 33191, t: "05-30-97  9:15a" },
+          { n: "SMARTDRV.EXE", s: 45379, t: "05-30-97  9:15a" },
+          { n: "EDIT.COM",     s: 413,   t: "05-30-97  9:15a" },
+          { n: "MOUSE.COM",    s: 56408, t: "05-30-97  9:15a" },
+        ],
+        "C:\\GAMES": [
+          { n: "DOOM",        d: true, t: "07-02-97  10:02p" },
+          { n: "仙剑奇侠传",  d: true, t: "07-20-97  11:40p" },
+          { n: "SANGO.TXT",   s: 512, t: "07-20-97  11:42p", c: [
+            "《仙剑奇侠传》通关感想（含剧透）：",
+            "锁妖塔塌下来那一刻，谁没哭过呢。",
+            "—— 4 张软盘装下了一个时代。",
+          ] },
+        ],
+        "C:\\GAMES\\DOOM": [
+          { n: "DOOM.EXE", s: 715123, t: "07-02-97  10:03p" },
+          { n: "DEICE.EXE", s: 28779, t: "07-02-97  10:03p" },
+        ],
+        "C:\\MUSIC": [
+          { n: "SONGS.TXT", s: 768, t: "07-25-97  0:05a", c: [
+            "站点 BGM 曲单（明日方舟：终末地）：",
+            "万里升平 · 不周风 · 大潮升 · 烘炉",
+            "完整版在现代模式主页右下角的点唱机里。",
+          ] },
+          { n: "PLAY.MID", s: 42069, t: "07-25-97  0:06a" },
+        ],
+      };
+      var cwd = "";   // "" = 根目录；"BBS" = C:\BBS；"GAMES\\DOOM" = C:\GAMES\DOOM
+
+      function cwdPath() { return "C:\\" + cwd + ">"; }
+
+      function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+
+      function findEntry(name) {
+        var items = DISK["C:\\" + cwd] || [];
+
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].n.toLowerCase() === name.toLowerCase()) return items[i];
+        }
+        return null;
+      }
+
+
+      function dosHelp() {
+        return [
+          ["── PaperClip DOS 内部命令 ───────────────", "amb"],
+          ["  " + pad("DIR", 10) + "查看目录", ""],
+          ["  " + pad("CD", 10) + "切换目录（cd bbs / cd ..）", ""],
+          ["  " + pad("TYPE", 10) + "查看文本文件", ""],
+          ["  " + pad("VER", 10) + "系统版本", ""],
+          ["  " + pad("MEM", 10) + "内存报表", ""],
+          ["  " + pad("CLS", 10) + "清屏", ""],
+          ["  " + pad("DATE/TIME", 10) + "日期 / 时间", ""],
+          ["", "dim"],
+          ["  ★ 输入 BBS 运行 BBS.EXE，拨号上站！", "amb"],
+          ["", "dim"],
+        ];
+      }
+
+      function dosDir() {
+        var items = DISK["C:\\" + cwd] || [];
+        var rows = [
+          [" 卷 C: 中的卷是 PAPERCLIP", "dim"],
+          [" 卷的序列号是 1997-0830", "dim"],
+          ["", "dim"],
+          [" C:\\" + cwd + " 的目录", "dim"],
+          ["", "dim"],
+        ];
+        var files = 0, bytes = 0;
+        items.forEach(function (it) {
+          var meta = it.d ? "<DIR>     " : pad(fmtNum(it.s || 0), 10);
+          rows.push([pad(it.n, 14) + meta + " " + (it.t || "08-30-97  9:00a"), it.d ? "cyn" : ""]);
+          if (!it.d) { files++; bytes += it.s || 0; }
+        });
+        rows.push(["", "dim"]);
+        rows.push(["        " + files + " 个文件      " + fmtNum(bytes) + " 字节", "dim"]);
+        rows.push(["                  12,273,920 字节可用", "dim"]);
+        rows.push(["", "dim"]);
+        return rows;
+      }
+
+      function dosMem() {
+        return [
+          ["", "dim"],
+          ["  内存类型          总数       已用       空闲", "amb"],
+          ["  ────────────────────────────────────────────", "dim"],
+          ["  常规内存        655,360     67,840    587,520", ""],
+          ["  上位内存块      655,360          0    655,360", ""],
+          ["  扩展内存(XMS) 7,340,032  1,048,576  6,291,456", ""],
+          ["", "dim"],
+          ["  DOS 已常驻高端内存区。640K 对谁都足够用了。", "dim"],
+          ["", "dim"],
+        ];
+      }
+
+      async function dosDispatch(raw) {
+        var line = raw.trim();
+        var cmd = line.toLowerCase();
+        if (!cmd) return;
+
+        /* bbs.exe：重头戏，拨号上站 */
+        if (cmd === "bbs" || cmd === "bbs.exe") {
+          print("");
+          await runBBS();
+          if (!leaving) print("");
+          return;
+        }
+
+        if (cmd === "help" || cmd === "?") {
+          await renderLines(dosHelp(), true);
+        } else if (cmd === "dir") {
+          await renderLines(dosDir(), false);
+        } else if (cmd === "cd") {
+          print("C:\\" + cwd);
+        } else if (cmd === "cd.." || cmd.indexOf("cd ") === 0 || cmd.indexOf("cd\\") === 0) {
+          var arg = cmd === "cd.." ? ".." : (cmd.indexOf("cd\\") === 0 ? cmd.slice(2) : cmd.slice(3).trim());
+          if (arg === "..") {
+            cwd = cwd.split("\\").slice(0, -1).join("\\");
+          } else if (arg === "\\" || arg === "/") {
+            cwd = "";
+          } else {
+            var hit = findEntry(arg);
+            if (hit && hit.d) {
+              cwd = cwd ? cwd + "\\" + hit.n : hit.n;
+            } else {
+              await type("找不到路径 " + arg + " 。先 DIR 看看有什么吧。", "err");
+              print("");
+            }
+          }
+        } else if (cmd.indexOf("type ") === 0) {
+          var f = cmd.slice(5).trim();
+          var entry = findEntry(f);
+          if (!entry) {
+            await type("找不到文件 " + f + " 。", "err");
+            print("");
+          } else if (!entry.c) {
+            print("†°Æ►?∂ì" + Math.random().toString(36).slice(2, 8).toUpperCase() + "!!#@ ", "dim");
+            await type("  （二进制文件，TYPE 看不了，直接运行它试试）", "dim");
+            print("");
+          } else {
+            await renderLines(entry.c.map(function (t) { return [t, ""]; }), true);
+            print("");
+          }
+        } else if (cmd === "ver") {
+          print("");
+          print("PaperClip DOS Version 6.22", "wht");
+          print("回形针中文版 · UCDOS 内核 · 1997", "dim");
+          print("");
+        } else if (cmd === "mem") {
+          await renderLines(dosMem(), true);
+        } else if (cmd === "time" || cmd === "date") {
+          var d = new Date();
+          print("当前日期: " + (d.getMonth() + 1) + "-" + d.getDate() + "-" + d.getFullYear() +
+            "    当前时间: " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) + ":" + ("0" + d.getSeconds()).slice(-2));
+          print("");
+        } else if (cmd === "cls" || cmd === "clear") {
+          screen.innerHTML = "";
+        } else if (cmd === "win" || cmd === "windows") {
+          await type("此电脑未安装 Windows。1997 年的装机商说：先学会 DOS。", "amb");
+          print("");
+        } else if (cmd.indexOf("format") === 0) {
+          await type("警告：C: 盘所有数据将丢失！……逗你的，这块盘我不舍得格。", "err");
+          print("");
+        } else if (cmd === "edit") {
+          await type("EDIT.COM 的磁盘扇区损坏了。看文本请用 TYPE。", "dim");
+          print("");
+        } else if (cmd === "doom") {
+          await type("DOOM 需要 4MB 常规内存。很遗憾，DOS 只分给你 640K。", "err");
+          print("");
+        } else if (cmd.indexOf("ping") === 0) {
+          /* ping：查询 Minecraft 服务器实时状态（联网） */
+          var host = cmd.slice(4).trim() || MC_HOST;
+          await type("正在 Ping " + host + " ...", "dim");
+          if (host.indexOf(MC_HOST) !== -1) {
+            try {
+              var st = await fetchMcStatus();
+              if (st.status === "online") {
+                print("来自 " + MC_HOST + ":" + MC_PORT + " 的回复: 在线 · " + (st.version || "未知版本"), "cyn");
+                print("在线玩家: " + ((st.players && st.players.online) != null ? st.players.online : "?") +
+                  " / " + ((st.players && st.players.max) != null ? st.players.max : "?"), "");
+                var mtxt = (typeof st.pureMotd === "string" && st.pureMotd) || mcMotdText(st.motd);
+                if (mtxt) print("MOTD: " + mtxt.replace(/\n+/g, " "), "dim");
+              } else {
+                print("请求超时。服务器不在线（又炸了）。", "err");
+              }
+            } catch (e2) {
+              await type("Ping 失败：查询接口不可达。", "err");
+              print("");
+            }
+          } else {
+            await type("Ping 请求超时（这台 486 只认识 " + MC_HOST + "）。", "err");
+            print("");
+          }
+        } else {
+          print("Bad command or file name", "err");
+        }
+      }
+
+      /* ---------------- DOS 主循环 ---------------- */
+      async function dosLoop() {
+        while (!leaving) {
+          var raw = await ask(cwdPath());
+          if (leaving) return;
+          if (!raw) continue;
+          await dosDispatch(raw);
+        }
+      }
+
+      /* ---------------- 开机：POST 自检 + DOS 引导 ---------------- */
+      async function bootSequence() {
+        power.remove();
+        crt.classList.add("booting");
+        inDial = true;
+        statusbar.classList.add("on");
+        sbSet("PaperClip DOS v6.22");
+
+        /* POST 蜂鸣：经典的一声短开机音 */
+        beep(880, 0.12, 0.05, "square");
+        loadSiteData();   // 后台抓取主页真实数据（时间线/技能/版本/曲单），不打断开机动画
+        await dialSleep(650);
+        print("PaperClip BIOS v1.03 · (C) 1997 Clip Software Lab.", "dim");
+        print("");
+        print("Main Processor : 486DX2-66");
+        await dialSleep(280);
+        print("Memory Test    : 8192KB OK");
+        await dialSleep(450);
+        print("");
+        await dialSleep(450);
+        print("Starting PaperClip DOS v6.22 ...", "wht");
+        await dialSleep(750);
+        print("HIMEM: DOS XMS 驱动 3.10 ....... 已安装", "dim");
+        await dialSleep(260);
+        print("SMARTDRV 磁盘高速缓存 .......... 已加载", "dim");
+        await dialSleep(260);
+        print("MSCDEX 光驱驱动 2.23 ........... 已加载", "dim");
+        await dialSleep(260);
+        print("悦音 Modem 驱动 (COM2 / IRQ3) .. 已就绪", "dim");
+        await dialSleep(260);
+        print("UCDOS 5.0 中文平台 ............ 已加载", "dim");
+        await dialSleep(550);
+        print("");
+
+        /* 引导动画结束，进入 DOS 命令行 */
+        inDial = false;
+        dialDone = false;
+        skipFlag = false;
+
+        await type("提示：输入 help 查看命令 · 运行 bbs 拨号上站", "cyn");
+        print("");
+        await dosLoop();
+      }
+
+      /* 老用户提示逻辑已并入登录流程（见 runBBS 登录段） */
+
+      /* 拨号阶段跳过：双击屏幕 → 补完打印、停掉已排期音效并加速所有等待 */
+      crt.addEventListener("dblclick", function () {
+        if (inDial && !dialDone) {
+          dialDone = true;
+          skipFlag = true;
+          if (curJob) curJob.finish();
+          stopAllSfx();
+        }
+      });
+
+      power.addEventListener("click", function () {
+        audioInit();
+        bootSequence();
+      });
+      power.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); audioInit(); bootSequence(); }
+      });
+    })();
+  </script>
+</body>
+</html>
