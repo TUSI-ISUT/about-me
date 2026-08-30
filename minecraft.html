@@ -41,6 +41,9 @@
   </script>
   <link rel="stylesheet" href="libs/aos.css" />
   <link rel="stylesheet" href="style.css" />
+  <!-- Cloudflare Web Analytics -->
+  <script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "a7891447e3ca46b3b3687011d3382114"}'></script>
+  <!-- End Cloudflare Web Analytics -->
 </head>
 <body>
 
@@ -75,13 +78,13 @@
   <!-- ==================== 主体内容（#swup 为 Swup 页面切换容器） ==================== -->
   <main id="swup" class="transition-fade">
     <section class="container">
-      <div class="page-head">
+      <div class="page-head" data-aos="fade-up">
         <h1>Minecraft</h1>
         <p>服务器介绍</p>
       </div>
 
       <!-- 服务器状态卡片 -->
-      <div class="mc-card" id="mc-result">
+      <div class="mc-card" id="mc-result" data-aos="fade-up" data-aos-delay="100">
         <!-- 加载中占位（页面打开即显示，查询完成后隐藏） -->
         <div class="mc-loading" id="mc-loading">
           <span class="mc-spinner"></span>加载中…
@@ -125,7 +128,7 @@
       </div>
 
       <!-- 独立跳转按钮：位于服务器信息卡片下方，两个按钮并排 -->
-      <div class="mc-action" id="mc-action">
+      <div class="mc-action" id="mc-action" data-aos="fade-up" data-aos-delay="200">
         <!-- 下载按钮：带下拉菜单，选择版本后跳转 -->
         <div class="mc-dropdown" id="mc-dropdown">
           <button class="mc-join-btn mc-dropdown-toggle" id="mc-download-btn" type="button">下载服务器客户端整合包 ▾</button>
@@ -379,7 +382,7 @@
       <div class="footer-grid">
         <div>
           <h4>PaperClip</h4>
-          <p></p>
+          <p>一名在校学生的个人小站，记录学习与折腾。</p>
         </div>
 
         <!-- 中：快速链接 -->
@@ -405,7 +408,7 @@
       <!-- 版权行：年份由 main.js 自动更新 -->
       <div class="footer-bottom">
         <p>© <span id="footer-year">2026</span> PaperClip · 保留所有权利</p>
-        <p>99%vibe codeing</p>
+        <p>99% Vibe Coding</p>
         <p>Designed &amp; Built by PaperClip</p>
       </div>
     </div>

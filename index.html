@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <!-- 响应式必备：视口宽度 = 设备宽度，初始缩放 1 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="PaperClip · " />
+  <meta name="description" content="PaperClip · 一名在校学生的个人主页" />
   <title>PaperClip | 首页</title>
   <!-- 网站图标：浏览器标签页显示 -->
   <link rel="icon" type="image/jpeg" href="00.jpg" />
@@ -41,6 +41,9 @@
   </script>
   <link rel="stylesheet" href="libs/aos.css" />
   <link rel="stylesheet" href="style.css" />
+  <!-- Cloudflare Web Analytics -->
+  <script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "a7891447e3ca46b3b3687011d3382114"}'></script>
+  <!-- End Cloudflare Web Analytics -->
 </head>
 <body>
 
@@ -84,104 +87,103 @@
         <div>
           <h1>你好，我是<span class="text-gradient">PaperClip</span> 👋</h1>
           <!-- 居住地 / 年限 -->
-          <span class="location">📍 中国大陆</span>
+          <span class="location">📍 中国大陆 · 在校学生</span>
           <p class="bio">
-            
+            一名普通的学生，喜欢折腾网页、玩 Minecraft、听明日方舟：终末地的歌。
+            相信"先动手做出来，再慢慢学好"——这个站点就是我边学边做出来的 99% Vibe Coding 作品。
           </p>
         </div>
       </div>
     </section>
 
-    <!-- ---------- 职业历程时间轴 ---------- -->
+    <!-- ---------- 我的轨迹 ---------- -->
     <section class="container" style="padding-bottom: 64px;">
-      <h2 class="section-title">职业历程</h2>
+      <h2 class="section-title">我的轨迹</h2>
       <div class="timeline">
 
         <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3></h3>
-          <span class="role"></span>
-          <p></p>
+          <span class="period">现在</span>
+          <h3>在校学生</h3>
+          <span class="role">边学边玩</span>
+          <p>白天上课，课余时间折腾自己的小项目：写网页、开服务器、剪点视频。</p>
         </div>
 
         <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3></h3>
-          <span class="role"></span>
-          <p> </p>
+          <span class="period">这个站点</span>
+          <h3>个人主页 PaperClip</h3>
+          <span class="role">HTML / CSS / JS</span>
+          <p>你现在看到的这个网站。99%AI + 1%人工，部署在 Cloudflare Pages 上，还带了一个背景音乐播放器。</p>
         </div>
 
         <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3></h3>
-          <span class="role"></span>
-          <p></p>
+          <span class="period">兴趣</span>
+          <h3>Minecraft</h3>
+          <span class="role">玩家 / 服主</span>
+          <p>从挖矿盖房到研究服务器，Minecraft 页面里有我常玩的服务器状态。</p>
         </div>
 
         <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3></h3>
-          <span class="role"></span>
-          <p></p>
+          <span class="period">兴趣</span>
+          <h3>明日方舟：终末地</h3>
+          <span class="role">玩家</span>
+          <p>喜欢终末地的音乐，所以把原声集放进了这个站点的背景音乐里。</p>
         </div>
 
         <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3></h3>
-          <span class="role"></span>
-          <p></p>
+          <span class="period">持续</span>
+          <h3>正在学的</h3>
+          <span class="role">JavaScript · Python</span>
+          <p>目标是有一天能不看教程独立写出想要的东西，把 Vibe Coding 的比例从 99% 降下来一点。</p>
         </div>
 
         <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3></h3>
+          <span class="period">未完待续</span>
+          <h3>what are you waiting for?</h3>
           <span class="role"></span>
-          <p></p>
+          <p>Is nothing here. —— 下一站，等我把它们做出来。</p>
         </div>
-        
-        <div class="tl-item reveal">
-          <span class="period"></span>
-          <h3>what are you waiting for?</span></h3>
-          <span class="role"></span>
-          <p>Is nothing here.</p>
-        </div>
+      </div>
+
+      <!-- 折叠开关：默认只显示前两条，点击展开/收起（逻辑见 main.js） -->
+      <div class="tl-actions">
+        <button type="button" class="tl-toggle" aria-expanded="false">展开全部 ▾</button>
       </div>
     </section>
 
     <!-- ---------- 技能进度条 ---------- -->
     <section class="container" style="padding-bottom: 64px;">
-      <h2 class="section-title">核心技能</h2>
+      <h2 class="section-title">正在练习的技能</h2>
       <!-- data-width 为目标熟练度，进入视口时由 JS 播放生长动画 -->
       <div class="skills-grid">
 
         <div class="skill" data-aos="fade-up">
-          <div class="skill-head"><b>React / Next.js</b><span>0%</span></div>
-          <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
+          <div class="skill-head"><b>HTML / CSS</b><span>65%</span></div>
+          <div class="bar"><div class="bar-fill" data-width="65%"></div></div>
         </div>
 
         <div class="skill" data-aos="fade-up">
-          <div class="skill-head"><b>Node.js / Python</b><span>0%</span></div>
-          <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
+          <div class="skill-head"><b>JavaScript</b><span>40%</span></div>
+          <div class="bar"><div class="bar-fill" data-width="40%"></div></div>
         </div>
 
         <div class="skill" data-aos="fade-up">
-          <div class="skill-head"><b>Figma / UI 设计</b><span>0%</span></div>
-          <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
+          <div class="skill-head"><b>AI 辅助编程（Vibe Coding）</b><span>80%</span></div>
+          <div class="bar"><div class="bar-fill" data-width="80%"></div></div>
         </div>
 
         <div class="skill" data-aos="fade-up">
-          <div class="skill-head"><b>Docker / DevOps</b><span>0%</span></div>
-          <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
+          <div class="skill-head"><b>Minecraft 服务器折腾</b><span>70%</span></div>
+          <div class="bar"><div class="bar-fill" data-width="70%"></div></div>
         </div>
 
         <div class="skill" data-aos="fade-up">
-          <div class="skill-head"><b>TypeScript</b><span>0%</span></div>
-          <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
+          <div class="skill-head"><b>Python（入门中）</b><span>25%</span></div>
+          <div class="bar"><div class="bar-fill" data-width="25%"></div></div>
         </div>
 
         <div class="skill" data-aos="fade-up">
-          <div class="skill-head"><b>数据库 / PostgreSQL</b><span>0%</span></div>
-          <div class="bar"><div class="bar-fill" data-width="0%"></div></div>
+          <div class="skill-head"><b>Git / 部署</b><span>50%</span></div>
+          <div class="bar"><div class="bar-fill" data-width="50%"></div></div>
         </div>
       </div>
     </section>
@@ -193,7 +195,7 @@
       <div class="footer-grid">
         <div>
           <h4>PaperClip</h4>
-          <p></p>
+          <p>一名在校学生的个人小站，记录学习与折腾。</p>
         </div>
 
         <!-- 中：快速链接 -->
@@ -219,7 +221,7 @@
       <!-- 版权行：年份由 main.js 自动更新 -->
       <div class="footer-bottom">
         <p>© <span id="footer-year">2026</span> PaperClip · 保留所有权利</p>
-        <p>99%vibe codeing</p>
+        <p>99% Vibe Coding</p>
         <p>Designed &amp; Built by PaperClip</p>
       </div>
     </div>

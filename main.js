@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initThemeToggle();     // 深浅色切换
   initAOS();             // 滚动触发淡入
   initSkillBars();       // 技能进度条
+  initTimeline();        // 首页"我的轨迹"折叠
   initFooterYear();      // 年份
   initProgressBar();     // 创建进度条 DOM
   initSmoothScroll();    // Lenis 平滑滚动
@@ -89,10 +90,15 @@ function getTheme() {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-/* 2.2 应用主题：切换 html 类 + 更新按钮图标与无障碍标签 */
+/* 2.2 应用主题：切换 html 类 + 更新按钮图标与无障碍标签
+   切换瞬间给 html 挂 .theme-anim，让全站颜色平滑过渡而非闪变 */
 function applyTheme(theme) {
   const root = document.documentElement;
   const btn = document.getElementById("theme-toggle");
+
+  root.classList.add("theme-anim");
+  clearTimeout(applyTheme._timer);
+  applyTheme._timer = setTimeout(() => root.classList.remove("theme-anim"), 450);
 
   root.classList.toggle("light", theme === "light");
 
@@ -166,6 +172,34 @@ function initSkillBars() {
   );
 
   fills.forEach((el) => observer.observe(el));
+}
+
+/* ------------------------------------------------------------
+ * 4.5 "我的轨迹"时间轴折叠：默认只显示前两条，其余折叠，
+ *     点"展开全部/收起"切换（仅首页存在 .timeline 时生效）
+ * ---------------------------------------------------------- */
+function initTimeline() {
+  const timeline = document.querySelector(".timeline");
+  const toggleBtn = document.querySelector(".tl-toggle");
+  if (!timeline || !toggleBtn) return;
+
+  // 第 3 条起标记为可折叠项；每次初始化（含 Swup 换页重放）都恢复默认折叠
+  timeline.querySelectorAll(".tl-item").forEach((el, i) => {
+    el.classList.toggle("tl-extra", i >= 2);
+  });
+  timeline.classList.add("collapsed");
+
+  const sync = () => {
+    const collapsed = timeline.classList.contains("collapsed");
+    toggleBtn.textContent = collapsed ? "展开全部 ▾" : "收起 ▴";
+    toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+  };
+  sync();
+
+  toggleBtn.onclick = () => {
+    timeline.classList.toggle("collapsed");
+    sync();
+  };
 }
 
 /* ------------------------------------------------------------
@@ -265,6 +299,7 @@ function initSwup() {
   swup.hooks.on("content:replace", () => {
     updateNavActive();                       // 导航高亮跟随新页面
     initSkillBars();                         // 重新观察技能条（首页）
+    initTimeline();                          // 时间轴折叠（首页，幂等）
     initFooterYear();                        // 页脚年份（幂等）
     initHeroFx();                            // 首页英雄区 GSAP 动画（其它页自动跳过）
     if (window.AOS && window.AOS.refreshHard) AOS.refreshHard(); // 重新扫描 data-aos
@@ -451,7 +486,7 @@ function initMusicPlayer() {
   let manualTrack = null;
 
   const audio = new Audio();
-  const VOLUME = 0.35; // 固定音量（已移除音量调节）
+  const VOLUME = 0.15; // 固定音量：背景音乐，音量压低不抢页面内容（已移除音量调节）
   audio.volume = VOLUME;
   audio.preload = "metadata"; // 预载时长等元信息：点播时能更快起播，流量开销极小
 
@@ -516,11 +551,69 @@ function initMusicPlayer() {
     if (!panel.hidden) refreshPanel(); // 面板开着时同步高亮与固定标记
   }
 
+  /* ---- 播放进度记忆：localStorage("musicState")，按曲单记录上次曲目与时间点 ---- */
+  const STATE_KEY = "musicState";
+
+  function savePosition() {
+    if (manualTrack || !audio.src || audio.ended) return;
+    const t = audio.currentTime;
+    if (!t) return;
+    try {
+      const all = JSON.parse(localStorage.getItem(STATE_KEY) || "{}");
+      all[currentKey] = { track: currentTrack(), time: t };
+      localStorage.setItem(STATE_KEY, JSON.stringify(all));
+    } catch (e) {}
+  }
+
+  /* 恢复某曲单的上次曲目到 state.index，返回需 seek 的时间（无记录返回 0） */
+  function restoreIndex(key) {
+    let s;
+    try { s = JSON.parse(localStorage.getItem(STATE_KEY) || "{}")[key]; } catch (e) {}
+    if (!s || !s.track) return 0;
+    const st = state[key];
+    const i = st.order.indexOf(s.track);
+    if (i === -1) return 0;
+    st.index = i;
+    return s.time > 5 ? s.time : 0; // 快开头就从头播
+  }
+
+  /* 节流保存：timeupdate 高频触发，每 5 秒落一次盘；暂停/切后台/关页前立即保存 */
+  let lastSave = 0;
+  audio.addEventListener("timeupdate", () => {
+    const now = Date.now();
+    if (now - lastSave > 5000) {
+      lastSave = now;
+      savePosition();
+    }
+  });
+  audio.addEventListener("pause", savePosition);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) savePosition();
+  });
+  window.addEventListener("pagehide", savePosition);
+
+  /* 待恢复的播放进度（秒）：restoreIndex() 设置，play() 换源后应用 */
+  let pendingSeek = 0;
+
   function play() {
     // src 与当前曲单不一致（首次播放或换页切单）时重新加载
     if (audio.getAttribute("src") !== expectedSrc()) {
       audio.src = expectedSrc();
       updateMediaSession();
+      // 恢复上次播放到的时间点（元数据就绪后再 seek）
+      if (pendingSeek > 0) {
+        const seekTo = pendingSeek;
+        pendingSeek = 0;
+        if (audio.readyState >= 1) {
+          audio.currentTime = seekTo;
+        } else {
+          audio.addEventListener(
+            "loadedmetadata",
+            () => (audio.currentTime = seekTo),
+            { once: true }
+          );
+        }
+      }
     }
     audio
       .play()
@@ -609,7 +702,8 @@ function initMusicPlayer() {
     const key = pageToKey();
     if (key === currentKey) return;
     currentKey = key;
-    if (key === "mc") {
+    // 有历史记录则恢复上次曲目与进度；没有则随机起一首（仅 MC 曲单）
+    if (!restoreIndex(key) && key === "mc") {
       const s = state.mc;
       s.index = Math.floor(Math.random() * s.order.length); // 随机换一首
     }
@@ -728,8 +822,7 @@ function initMusicPlayer() {
      - 浏览器允许时（有媒体互动记录）直接起播
      - 被自动播放策略拦截时，等待首次任意点击/触摸续播 */
   function tryAutoplay() {
-    audio.src = expectedSrc();
-    updateMediaSession();
+    restoreIndex(currentKey); // 恢复上次听到的曲目与进度
     audio
       .play()
       .then(() => {

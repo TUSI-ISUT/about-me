@@ -353,6 +353,34 @@ ul { list-style: none; }
   color: var(--text-secondary);
 }
 
+/* 时间轴折叠：.collapsed 时第 3 条起隐藏，开关按钮在时间轴下方 */
+.timeline.collapsed .tl-extra {
+  display: none;
+}
+
+.tl-actions {
+  margin-top: 18px;
+  text-align: center;
+}
+
+.tl-toggle {
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tl-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
 /* 技能进度条 */
 .skills-grid {
   display: grid;
@@ -1101,26 +1129,26 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   to { transform: rotate(360deg); }
 }
 
-/* 右下角小徽标：▶ 待播放 / ‖ 播放中 */
-.music-toggle::after {
+/* 唱片中心的播放/暂停图标：▶ 待播放 / ‖ 播放中（覆盖在盘面上，不随旋转） */
+.music-toggle::before {
   content: "▶";
   position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: var(--accent-gradient);
-  color: #fff;
-  font-size: 8px;
-  line-height: 1;
+  inset: 0;
+  z-index: 1;
   display: grid;
   place-items: center;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  line-height: 1;
+  color: #fff;
+  text-indent: 2px; /* 三角形视觉居中修正 */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
-.music-toggle.playing::after {
+.music-toggle.playing::before {
   content: "‖";
+  text-indent: 0;
+  letter-spacing: -1px;
 }
 
 /* 用户偏好减少动态效果时唱片不旋转 */
@@ -1255,5 +1283,46 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   .music-panel h4,
   .music-panel .track {
     animation: none;
+  }
+}
+
+/* ============================================================
+   12. 全站统一过渡动画
+   ============================================================ */
+
+/* 12.1 主题切换颜色过渡：.theme-anim 仅在切换瞬间由 JS 挂载
+   （450ms 后移除），平时不挂载，避免干扰其它 hover/入场动画 */
+.theme-anim,
+.theme-anim *,
+.theme-anim *::before,
+.theme-anim *::after {
+  transition: background-color 0.35s ease, color 0.35s ease,
+    border-color 0.35s ease, box-shadow 0.35s ease, fill 0.35s ease,
+    stroke 0.35s ease !important;
+}
+
+/* 12.2 可交互元素统一悬停反馈：没写 transition 的补上默认过渡
+   （已有自定义 transition 的元素不受影响） */
+.mc-dropdown-menu,
+.mc-dropdown-menu a,
+.contact-item a,
+.footer-links a {
+  transition: var(--transition);
+}
+
+/* 12.3 卡片/区块统一入场：配合 data-aos="fade-up" 使用 */
+.mc-card[data-aos],
+.contact-card[data-aos],
+.page-head[data-aos] {
+  transition-property: opacity, transform;
+}
+
+/* 12.4 用户偏好减少动态效果时：禁用所有统一过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .theme-anim,
+  .theme-anim *,
+  .theme-anim *::before,
+  .theme-anim *::after {
+    transition: none !important;
   }
 }
