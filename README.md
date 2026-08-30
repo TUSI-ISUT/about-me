@@ -6,4 +6,4 @@
 
 - Email: mc_yyds@qq.com
 - GitHub: https://github.com/TUSI-ISUT
-- 站点: https://about.hell0.dpdns.org
+- 站点: https://hell0.dpdns.org

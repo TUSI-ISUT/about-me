@@ -18,7 +18,7 @@
    ============================================================ */
 
 /* 站点版本号：发版时只改这里，页脚自动同步显示 */
-const SITE_VERSION = "v0.0.7";
+const SITE_VERSION = "v0.0.8";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
@@ -160,6 +160,12 @@ function initAOS() {
     // 用户偏好减少动态效果时直接禁用（元素立即可见）
     disable: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   });
+
+  /* 部分嵌入式浏览器把页面标记为后台时会冻结 AOS 的 IntersectionObserver，
+     导致 data-aos 元素一直停留在透明态；页面转为可见时重新扫描补播 */
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && window.AOS) AOS.refresh();
+  });
 }
 
 /* ------------------------------------------------------------
@@ -193,19 +199,47 @@ function initGiscusShield() {
 /* ------------------------------------------------------------
  * 4. 技能进度条：进入视口时从 0 生长到目标宽度（首页）
  *    HTML 写法：<div class="bar-fill" data-width="85%"></div>
+ *    兼容性：部分嵌入式浏览器（webview）会把页面标记为后台并
+ *    冻结 IntersectionObserver 回调，导致进度条永远为 0。
+ *    因此在 IO 之外叠加一层手动几何检测兜底（滚动/可见性变化时
+ *    逐个检查），保证任何环境下进度条都能显示。
  * ---------------------------------------------------------- */
 function initSkillBars() {
-  const fills = document.querySelectorAll(".bar-fill");
+  const fills = Array.from(
+    document.querySelectorAll(".bar-fill")
+  ).filter((el) => !el.style.width);
   if (!fills.length) return;
 
   const animate = (el) => (el.style.width = el.dataset.width || "0%");
+
+  /* 手动兜底：直接按几何位置判断，视口内即填充 */
+  const checkManually = () => {
+    const vh = window.innerHeight;
+    let remaining = false;
+    fills.forEach((el) => {
+      /* Swup 换页后旧元素已脱离 DOM：视为完成，不再阻塞解除监听 */
+      if (!el.isConnected || el.style.width) return;
+      if (el.getBoundingClientRect().top < vh * 0.9) {
+        animate(el);
+      } else {
+        remaining = true;
+      }
+    });
+    /* 全部填完后撤掉兜底监听 */
+    if (!remaining) {
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("visibilitychange", onScroll);
+      if (observer) observer.disconnect();
+    }
+  };
+  const onScroll = () => requestAnimationFrame(checkManually);
 
   if (!("IntersectionObserver" in window)) {
     fills.forEach(animate);
     return;
   }
 
-  const observer = new IntersectionObserver(
+  let observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
@@ -218,6 +252,11 @@ function initSkillBars() {
   );
 
   fills.forEach((el) => observer.observe(el));
+
+  /* 立即手动检查一次，再挂滚动/可见性兜底（与 IO 双保险） */
+  checkManually();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  document.addEventListener("visibilitychange", onScroll);
 }
 
 /* ------------------------------------------------------------

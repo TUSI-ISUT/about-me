@@ -1,4 +1,19 @@
 /* ---------- 1. CSS 变量：全站统一的设计令牌 ---------- */
+
+/* 复古像素字体：Fusion Pixel 12px 点阵（OFL 开源，本地 fonts/ 目录），
+   供 BBS 入口卡片预览屏等复古元素使用；字号取 12 的整数倍保持像素锐利 */
+@font-face {
+  font-family: "Fusion Pixel";
+  src: url("fonts/fusion-pixel-12px-monospaced-latin.ttf.woff2") format("woff2");
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+2000-206F, U+2190-21FF, U+2500-257F, U+2580-259F, U+25A0-25FF;
+}
+@font-face {
+  font-family: "Fusion Pixel";
+  src: url("fonts/fusion-pixel-12px-monospaced-zh_hans.ttf.woff2") format("woff2");
+  font-display: swap;
+}
+
 :root {
   /* 背景层次（由深到浅） */
   --bg: #0d1017;              /* 页面最底层背景 */
@@ -413,6 +428,105 @@ ul { list-style: none; }
   background: var(--accent-gradient);
   width: 0;
   transition: width 1.1s cubic-bezier(0.25, 1, 0.4, 1);
+}
+
+/* 复古模式入口：拨号 BBS 终端卡片
+   卡片内部是独立 CRT 小屏（磷光绿），不受全站深浅色主题影响 */
+.bbs-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  align-items: center;
+  padding: 26px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+.bbs-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* 迷你 DOS 屏：黑底浅灰字 + 扫描线，模拟 bbs.html 的观感 */
+.bbs-preview {
+  padding: 18px 20px;
+  min-height: 168px;
+  font-family: "Fusion Pixel", "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.9;
+  color: #c9c9c9;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.22);
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(255, 255, 255, 0.04), transparent 65%),
+    #000;
+  border: 1px solid #33333d;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.85);
+  position: relative;
+  overflow: hidden;
+}
+
+.bbs-preview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0 2px,
+    rgba(0, 0, 0, 0.25) 2px 4px
+  );
+}
+
+.bbs-preview p { white-space: nowrap; }
+
+/* 末行的闪烁块状光标 */
+.bbs-preview p:last-child::after {
+  content: "█";
+  margin-left: 2px;
+  animation: bbs-blink 1.06s steps(1) infinite;
+}
+
+@keyframes bbs-blink { 50% { opacity: 0; } }
+
+.bbs-preview .dim { color: #6e6e6e; text-shadow: none; }
+.bbs-preview .connect { color: #ffe95c; text-shadow: 0 0 6px rgba(255, 233, 92, 0.35); }
+
+/* 右侧文字与按钮 */
+.bbs-info h3 { font-size: 1.1rem; margin-bottom: 8px; }
+
+.bbs-info p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.bbs-btn {
+  display: inline-block;
+  padding: 10px 24px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-family: "Fusion Pixel", "Consolas", "Courier New", monospace;
+  color: #ffe95c;
+  background: rgba(255, 233, 92, 0.07);
+  border: 1px solid rgba(255, 233, 92, 0.5);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.bbs-btn:hover {
+  color: #000;
+  background: #ffe95c;
+  box-shadow: 0 6px 18px rgba(255, 233, 92, 0.3);
+  transform: translateY(-2px);
+}
+
+/* 手机端：预览屏与文字降为单列 */
+@media (max-width: 768px) {
+  .bbs-card { grid-template-columns: 1fr; }
+  .bbs-preview { min-height: 140px; font-size: 12px; }
 }
 
 /* 他人评价：引号设计 */
