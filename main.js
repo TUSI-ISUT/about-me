@@ -18,14 +18,15 @@
    ============================================================ */
 
 /* 站点版本号：发版时只改这里，页脚自动同步显示 */
-const SITE_VERSION = "v0.0.8";
+const SITE_VERSION = "v0.1.0";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
   initThemeToggle();     // 深浅色切换
+  initTimeline();        // 首页"我的轨迹"折叠（必须在 initAOS 之前：折叠会移动布局，
+                         // 否则 AOS 会缓存折叠前的元素位置，技能区永远不触发入场动画）
   initAOS();             // 滚动触发淡入
   initSkillBars();       // 技能进度条
-  initTimeline();        // 首页"我的轨迹"折叠
   initFooterYear();      // 年份
   initVersion();         // 页脚版本号
   initProgressBar();     // 创建进度条 DOM
@@ -166,6 +167,17 @@ function initAOS() {
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden && window.AOS) AOS.refresh();
   });
+
+  /* 字体/图片在 DOMContentLoaded 之后才加载完成，会再次移动布局；
+     这些时机各重测一次位置，避免 AOS 用旧位置漏判"元素已进入视口" */
+  window.addEventListener("load", function () {
+    if (window.AOS) AOS.refresh();
+  });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () {
+      if (window.AOS) AOS.refresh();
+    });
+  }
 }
 
 /* ------------------------------------------------------------

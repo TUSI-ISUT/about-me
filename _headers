@@ -19,3 +19,10 @@
   Cache-Control: public, max-age=604800
 /icon-pause.webp
   Cache-Control: public, max-age=604800
+# HTML 与核心脚本/样式：每次都向服务器验证版本，杜绝新旧混用
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+/main.js
+  Cache-Control: public, max-age=0, must-revalidate
+/style.css
+  Cache-Control: public, max-age=0, must-revalidate

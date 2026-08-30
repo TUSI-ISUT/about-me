@@ -333,38 +333,6 @@
       100% { transform: scaleY(1); filter: brightness(1); }
     }
 
-    /* ---------- 右上角固定按钮：静音 / 挂断 ---------- */
-    #ctrls {
-      position: fixed;
-      top: 12px;
-      right: 14px;
-      z-index: 30;
-      display: flex;
-      gap: 8px;
-    }
-
-    #ctrls button, #ctrls a {
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      font-size: 17px;
-      font-family: inherit;
-      color: var(--fg-dim);
-      background: rgba(0, 0, 0, 0.7);
-      border: 1px solid var(--fg-dim);
-      border-radius: 6px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.25s ease;
-    }
-
-    #ctrls button:hover, #ctrls a:hover {
-      color: var(--fg);
-      border-color: var(--fg);
-      box-shadow: 0 0 12px rgba(255, 255, 255, 0.22);
-    }
-
     /* ---------- DOS 蓝色状态栏 ---------- */
     #statusbar {
       flex-shrink: 0;
@@ -413,11 +381,6 @@
   </style>
 </head>
 <body>
-
-  <div id="ctrls">
-    <button id="mute" type="button" title="静音 / 取消静音" aria-label="切换声音">🔊</button>
-    <a href="index.html" id="exit-link" title="挂断并返回现代模式" aria-label="挂断并返回现代模式">✕</a>
-  </div>
 
   <div id="crt">
     <div id="band" aria-hidden="true"></div>
@@ -508,6 +471,7 @@
 
       var history = [];       // 输入历史（↑/↓ 翻阅）
       var histPos = -1;
+      var completer = null;   // Tab 补全回调：DOS 提示符下提供（dosCompleter），BBS 阶段为 null
       var muted = false;
       var dialDone = false;   // 拨号阶段按任意键可跳过
       var skipFlag = false;   // 置位后：type() 立即补完，dialSleep() 提前唤醒
@@ -626,14 +590,6 @@
       /* 消息提示音：菜单出现的短促 "叮" */
       function chime() { beep(880, 0.08, 0.04); beep(1320, 0.1, 0.035, "sine", ac ? ac.currentTime + 0.09 : 0); }
 
-      var muteBtn = document.getElementById("mute");
-      muteBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        muted = !muted;
-        muteBtn.textContent = muted ? "🔇" : "🔊";
-        if (master) master.gain.value = muted ? 0 : 0.6;
-      });
-
       /* ---------------- 输出：打字机 ---------------- */
       function scrollBottom() { screen.scrollTop = screen.scrollHeight; }
 
@@ -729,6 +685,25 @@
               if (histPos >= history.length) { histPos = -1; kb.value = ""; }
               else kb.value = history[histPos];
               e.preventDefault();
+            } else if (e.key === "Tab" && completer) {
+              /* Tab 补全：唯一候选直接补上；多个候选补公共前缀并列出 */
+              e.preventDefault();
+              var cv = kb.value;
+              var cands = completer(cv);
+              if (!cands.length) return;
+              if (cands.length === 1) {
+                kb.value = cands[0];
+              } else {
+                var pre = cands[0];
+                for (var ci = 1; ci < cands.length; ci++) {
+                  while (pre && cands[ci].toLowerCase().indexOf(pre.toLowerCase()) !== 0) {
+                    pre = pre.slice(0, -1);
+                  }
+                }
+                if (pre && pre !== cv) kb.value = pre;
+                print(cands.join("   "), "dim");
+              }
+              renderMirror();
             } else {
               click();
             }
@@ -763,12 +738,6 @@
           kb.value = "help";
           kb.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
         }
-      });
-
-      var exitLink = document.getElementById("exit-link");
-      if (exitLink) exitLink.addEventListener("click", function (e) {
-        e.preventDefault();
-        exitRetro();
       });
 
       /* ---------------- BBS 内容 ---------------- */
@@ -815,7 +784,7 @@
           ["[2] 我的轨迹", "时间线・Timeline"],
           ["[3] 技能档案", "ASCII 进度条"],
           ["[4] 布告栏", "本站公告 / 友情链接"],
-          ["[5] 留言板", "写下你的裂痕留言"],
+          ["[5] 留言板", "公开留言・同步GitHub"],
           ["[6] 在线用户", "看看谁在站上"],
           ["[7] 系统时间", "报时 + 机器档案"],
         ];
@@ -953,42 +922,17 @@
         ], true);
       }
 
-      /* ---------------- 留言板（localStorage） ---------------- */
+      /* ---------------- 留言板：公开留言（giscus/GitHub）+ 本地磁带（草稿） ----------------
+         公开留言与联系页的 giscus 是同一份 GitHub Discussion，
+         本端只读（GitHub 登录才能发），写公开留言走 msg send 跳转联系页；
+         本地磁带仅存本机，当草稿用。 */
       var MSG_KEY = "bbs_msgs";
+      var GH_REPO = "TUSI-ISUT/about-me";
+      var GH_DISCUSSION = 1;   // giscus 建立的「站点留言板」Discussion 编号
 
       function loadMsgs() {
         try { return JSON.parse(localStorage.getItem(MSG_KEY)) || []; }
         catch (e) { return []; }
-      }
-
-      function cmdMsg() {
-        return [
-          ["── 留言板 · ECHO WALL ───────────────────", "amb"],
-          ["  留言保存在你这台\"终端\"的本地磁带上", "dim"],
-          ["  （localStorage），只有你自己能看到。", "dim"],
-          ["  指令： msg list 查看留言 · 直接输入文字留言", "dim"],
-          ["", "dim"],
-        ];
-      }
-
-      function msgList() {
-        var msgs = loadMsgs();
-        if (!msgs.length) {
-          return [["  磁带还是空白的，来做第一个留言的人吧。", "dim"]];
-        }
-        var out = [["── 磁带上的留言（最近 10 条）──", "amb"]];
-        msgs.slice(-10).forEach(function (m) {
-          var d = new Date(m.t);
-          var stamp = d.getFullYear() + "-" +
-            ("0" + (d.getMonth() + 1)).slice(-2) + "-" +
-            ("0" + d.getDate()).slice(-2) + " " +
-            ("0" + d.getHours()).slice(-2) + ":" +
-            ("0" + d.getMinutes()).slice(-2);
-          out.push(["  " + stamp + "  " + m.by + ":", "cyn"]);
-          out.push(["    " + m.text, ""]);
-        });
-        out.push(["", "dim"]);
-        return out;
       }
 
       function msgSave(text) {
@@ -996,6 +940,89 @@
         msgs.push({ t: Date.now(), by: handle, text: text.slice(0, 120) });
         if (msgs.length > 50) msgs = msgs.slice(-50);
         try { localStorage.setItem(MSG_KEY, JSON.stringify(msgs)); } catch (e) {}
+      }
+
+      function cmdMsg() {
+        return [
+          ["── 留言板 · ECHO WALL ───────────────────", "amb"],
+          ["  公开留言板与联系页 giscus 同仓同步，全网可见。", "dim"],
+          ["  指令： msg list   读取公开留言板（联网）", ""],
+          ["        msg <文字>  写入本地磁带（草稿）", ""],
+          ["        msg send    去联系页发布公开留言", ""],
+          ["", "dim"],
+        ];
+      }
+
+      /* 读取公开留言：GitHub Discussions 公开 API，无需登录 */
+      function fetchPublicMsgs() {
+        return fetch(
+          "https://api.github.com/repos/" + GH_REPO + "/discussions/" +
+          GH_DISCUSSION + "/comments?per_page=10",
+          { headers: { Accept: "application/vnd.github+json" } }
+        ).then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        }).then(function (list) {
+          return list.map(function (c) {
+            return {
+              by: (c.user && c.user.login) || "匿名",
+              sysop: c.author_association === "OWNER",
+              t: c.created_at,
+              text: (c.body || "").replace(/\r/g, "").trim(),
+            };
+          });
+        });
+      }
+
+      /* ISO 时间 → BBS 风格 "MM-DD HH:MM" */
+      function isoStamp(iso) {
+        var d = new Date(iso);
+        return ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2) +
+          " " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+      }
+
+      /* 留言正文压成最多 3 行，每行缩进 4 列 */
+      function indentBody(text, maxLines) {
+        var lines = text.split("\n").slice(0, maxLines || 3);
+        if (text.split("\n").length > (maxLines || 3)) lines.push("……");
+        return lines.map(function (l) { return "    " + l; });
+      }
+
+      async function msgList() {
+        var publicRows = [];
+        try {
+          var pubs = await fetchPublicMsgs();
+          publicRows.push(["── 公开留言板 · 同步自 GitHub ───────────", "amb"]);
+          if (!pubs.length) {
+            publicRows.push(["  还没有公开留言，来做第一个吧。", "dim"]);
+          }
+          pubs.forEach(function (m) {
+            var who = m.sysop ? "SysOp·" + m.by : m.by;
+            publicRows.push(["  [" + isoStamp(m.t) + "]  " + who + ":", m.sysop ? "amb" : "cyn"]);
+            indentBody(m.text, 3).forEach(function (l) { publicRows.push([l, ""]); });
+          });
+          publicRows.push(["  （仅显示最近 10 条 · 完整版在联系页留言板）", "dim"]);
+          publicRows.push(["", "dim"]);
+        } catch (e) {
+          publicRows.push(["── 公开留言板 · 电话线又断了（GitHub 连不上）", "err"]);
+          publicRows.push(["", "dim"]);
+        }
+
+        /* 本地磁带：BBS 里写下的草稿 */
+        var tape = loadMsgs();
+        if (tape.length) {
+          publicRows.push(["── 本地磁带 · 草稿（未发布，仅本机可见）──", "amb"]);
+          tape.slice(-5).forEach(function (m) {
+            var d = new Date(m.t);
+            var stamp = ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2) +
+              " " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+            publicRows.push(["  [" + stamp + "]  " + m.by + ":", "cyn"]);
+            publicRows.push(["    " + m.text, ""]);
+          });
+          publicRows.push(["  msg send 可以去联系页把想法发到公开留言板。", "dim"]);
+          publicRows.push(["", "dim"]);
+        }
+        return publicRows;
       }
 
       /* ---------------- 在线用户（趣味假数据） ---------------- */
@@ -1180,11 +1207,17 @@
         } else if (cmd === "5" || cmd === "msg" || cmd === "留言") {
           await renderLines(cmdMsg(), true);
         } else if (msgCmd && msgCmd[1] === "list") {
-          await renderLines(msgList(), true);
+          await renderLines(await msgList(), true);
+        } else if (msgCmd && msgCmd[1] === "send") {
+          /* 公开留言需要 GitHub 登录，跳到联系页的 giscus 留言板 */
+          await type("正在切换到现代模式 ...（公开留言板在联系页）", "dim");
+          await sleep(700);
+          location.href = "contact.html#comments";
         } else if (msgCmd && msgCmd[1]) {
           msgSave(msgCmd[1]);
           chime();
-          await renderLines([["  ▸ 已写入磁带：" + msgCmd[1], "amb"]], true);
+          await renderLines([["  ▸ 已写入本地磁带：" + msgCmd[1], "amb"],
+            ["    （草稿仅本机可见 · msg send 可去联系页发布公开留言）", "dim"]], true);
         } else if (cmd === "6" || cmd === "who" || cmd === "users" || cmd === "在线") {
           await renderLines(cmdUsers(), true);
         } else if (cmd === "7" || cmd === "time" || cmd === "date" || cmd === "时间") {
@@ -1197,9 +1230,9 @@
         } else if (cmd === "exit" || cmd === "quit" || cmd === "bye" || cmd === "x" || cmd === "挂断" || cmd === "下线") {
           await hangup();
         } else if (raw.length >= 2 && cmd.charAt(0) !== "/" ) {
-          /* 自由文本 → 视作留言，模拟老 BBS 的聊天/留言习惯 */
+          /* 自由文本 → 视作留言草稿，模拟老 BBS 的聊天/留言习惯 */
           msgSave(raw);
-          await type("  （已悄悄帮你写进留言板，msg list 可以查看）", "dim");
+          await type("  （已悄悄帮你写进本地磁带，msg list 查看 · msg send 发布公开留言）", "dim");
           print("");
         } else {
           await type("未知指令：" + raw + "   输入 help 查看指令表", "err");
@@ -1239,6 +1272,7 @@
          ============================================================ */
       async function runBBS() {
         bbsEnded = false;
+        completer = null;   // BBS 阶段关闭 Tab 补全（呼号/菜单不是文件名）
         inDial = true;
         sbSet("正在拨号 · 33600 bps");
 
@@ -1316,12 +1350,12 @@
         "║" + padCols("  PaperClip 的电脑・README.TXT", 38) + "║",
         "╚" + rep("═", 19) + "╝",
         "",
-        " 这台 486 是 PaperClip 的复古玩具机。",
         "",
         " 1. 输入 bbs 运行 BBS.EXE，拨号上站",
         " 2. 输入 dir 看看硬盘里还藏了什么",
         " 3. 输入 ping 查 MC 服务器在不在线",
-        " 4. 输入 mem 检查 640K 内存够不够用",
+        " 4. 输入 scandisk / defrag 给硬盘做个体检",
+        " 5. 输入 tree 看目录树 · 按 TAB 补全文件名",
         "",
         " ※ 1997 年最好的上网方式：电话线 + 耐心。",
       ];
@@ -1332,6 +1366,14 @@
           { n: "GAMES",       d: true, t: "07-02-97  10:02p" },
           { n: "MUSIC",       d: true, t: "07-20-97  11:40p" },
           { n: "README.TXT",   s: 2048, t: "06-12-97  9:17p", c: README_TXT },
+          { n: "CONFIG.SYS",   s: 256, t: "05-30-97  9:18a", c: [
+            "DEVICE=C:\\DOS\\HIMEM.SYS",
+            "DEVICE=C:\\DOS\\SMARTDRV.EXE 2048",
+            "DOS=HIGH,UMB",
+            "FILES=40",
+            "BUFFERS=20",
+            "LASTDRIVE=E",
+          ] },
           { n: "AUTOEXEC.BAT", s: 318, t: "05-30-97  9:20p", c: [
             "@ECHO OFF",
             "PROMPT=$P$G",
@@ -1402,15 +1444,21 @@
       function dosHelp() {
         return [
           ["── PaperClip DOS 内部命令 ───────────────", "amb"],
-          ["  " + pad("DIR", 10) + "查看目录", ""],
-          ["  " + pad("CD", 10) + "切换目录（cd bbs / cd ..）", ""],
-          ["  " + pad("TYPE", 10) + "查看文本文件", ""],
-          ["  " + pad("VER", 10) + "系统版本", ""],
-          ["  " + pad("MEM", 10) + "内存报表", ""],
-          ["  " + pad("CLS", 10) + "清屏", ""],
-          ["  " + pad("DATE/TIME", 10) + "日期 / 时间", ""],
+          ["  " + pad("DIR", 12) + "查看目录（DIR /W 宽行）", ""],
+          ["  " + pad("CD", 12) + "切换目录（cd bbs / cd ..）", ""],
+          ["  " + pad("TYPE", 12) + "查看文本文件", ""],
+          ["  " + pad("TREE", 12) + "目录树", ""],
+          ["  " + pad("MD / RD / DEL", 12) + "建删目录 / 删文件", ""],
+          ["  " + pad("CHKDSK", 12) + "磁盘空间报表", ""],
+          ["  " + pad("SCANDISK", 12) + "扫描磁盘（有动画）", ""],
+          ["  " + pad("DEFRAG", 12) + "整理磁盘碎片（有动画）", ""],
+          ["  " + pad("MEM", 12) + "内存报表", ""],
+          ["  " + pad("PLAY", 12) + "播放 PLAY.MID（FM 合成）", ""],
+          ["  " + pad("VER/DATE/TIME/VOL", 12) + "版本 / 时钟 / 卷标", ""],
+          ["  " + pad("CLS / EXIT", 12) + "清屏 / 关机退出", ""],
           ["", "dim"],
-          ["  ★ 输入 BBS 运行 BBS.EXE，拨号上站！", "amb"],
+          ["  ★ 输入 BBS 运行 BBS.EXE 拨号上站", "amb"],
+          ["  ★ 输入时按 TAB 可补全命令与文件名", "dim"],
           ["", "dim"],
         ];
       }
@@ -1451,6 +1499,187 @@
         ];
       }
 
+      /* ============================================================
+         扩展 DOS 命令：tree / chkdsk / scandisk / defrag / 文件操作
+         ============================================================ */
+
+      /* dosStamp：MD/DEL 操作后 DIR 里显示的时间戳（月-日-97 风格） */
+      function dosStamp() {
+        var d = new Date();
+        return ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2) +
+          "-97  " + ("0" + ((d.getHours() % 12) || 12)).slice(-2) + ":" +
+          ("0" + d.getMinutes()).slice(-2) + (d.getHours() < 12 ? "a" : "p");
+      }
+
+      /* 当前目录下某文件/目录的数组下标（不存在返回 -1） */
+      function entryIndex(name) {
+        var items = DISK["C:\\" + cwd] || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].n.toLowerCase() === name.toLowerCase()) return i;
+        }
+        return -1;
+      }
+
+      /* TREE：递归遍历虚拟磁盘，生成经典目录树 */
+      function dosTree() {
+        var rows = [
+          [" Folder PATH listing for volume PAPERCLIP", "dim"],
+          [" Volume Serial Number is 1997-0830", "dim"],
+          ["", "dim"],
+          ["C:.", "wht"],
+        ];
+        (function walk(path, prefix) {
+          var items = DISK[path] || [];
+          items.forEach(function (it, i) {
+            var last = i === items.length - 1;
+            var branch = prefix + (last ? "└───" : "├───");
+            if (it.d) {
+              rows.push([branch + it.n, "cyn"]);
+              walk(path === "C:\\" ? path + it.n : path + "\\" + it.n,
+                prefix + (last ? "    " : "│   "));
+            } else {
+              rows.push([branch + it.n, ""]);
+            }
+          });
+        })("C:\\", "");
+        rows.push(["", "dim"]);
+        return rows;
+      }
+
+      function dosChkdsk() {
+        return [
+          ["", "dim"],
+          ["  卷 PAPERCLIP 创建于 06-12-1997 8:45", ""],
+          ["  卷的序列号 1997-0830", ""],
+          ["", "dim"],
+          ["  540,274,688 字节 · 磁盘总空间", ""],
+          ["      2,048 字节 · 每个分配单元", ""],
+          ["     12,273,920 字节 · 磁盘可用", ""],
+          ["             0 字节 · 坏扇区（谢天谢地）", "cyn"],
+          ["", "dim"],
+          ["  655,360 字节 · 常规内存总空间", ""],
+          ["     587,520 字节 · 常规内存可用", ""],
+          ["", "dim"],
+        ];
+      }
+
+      /* PLAY.MID：用方波 FM 音色真的放一段《致爱丽丝》开头 */
+      function playMidi() {
+        if (!ac || muted) return 0;
+        var f = { E5: 659.26, Ds5: 622.25, D5: 587.33, C5: 523.25, B4: 493.88,
+                  A4: 440, Gs4: 415.3, E4: 329.63, C4: 261.63 };
+        var seq = ["E5", "Ds5", "E5", "Ds5", "E5", "B4", "D5", "C5", "A4", null,
+                   "C4", "E4", "A4", "B4", null, "E4", "Gs4", "B4", "C5"];
+        var t = ac.currentTime + 0.15;
+        seq.forEach(function (n) {
+          if (n) beep(f[n], 0.18, 0.035, "square", t);
+          t += n ? 0.21 : 0.32;
+        });
+        return (t - ac.currentTime) * 1000;
+      }
+
+      async function playMidFile() {
+        await type("正在通过 OPL3 FM 合成器播放 PLAY.MID ...", "dim");
+        var dur = playMidi();
+        await sleep(dur || 4200);
+        print("播放完毕。这是属于 386 声卡的音色。", "dim");
+        print("");
+      }
+
+      /* DEFRAG：经典簇块整理动画——把零散数据块搬到前面拼成连续区 */
+      async function dosDefrag() {
+        var COLS = 36, ROWS = 9, TOTAL = COLS * ROWS;
+        await type("Microsoft Defrag · 优化 C: 盘", "amb");
+        await type("正在读取簇分配表 ...", "dim");
+        var used = [];
+        for (var i = 0; i < TOTAL; i++) used[i] = Math.random() < 0.6;
+        var p = print("", "cyn");
+        var step = 0;
+        await new Promise(function (done) {
+          var iv = setInterval(function () {
+            if (leaving) { clearInterval(iv); done(); return; }
+            /* 每轮交换两个簇：前面最靠前的空簇 ← 后面最靠后的数据簇 */
+            for (var k = 0; k < 2; k++) {
+              var firstFree = used.indexOf(false);
+              if (firstFree === -1) break;
+              var lastUsed = -1;
+              for (var j = TOTAL - 1; j > firstFree; j--) {
+                if (used[j]) { lastUsed = j; break; }
+              }
+              if (lastUsed === -1) break;
+              used[firstFree] = true;
+              used[lastUsed] = false;
+            }
+            var s = "";
+            for (var r = 0; r < ROWS; r++) {
+              for (var c = 0; c < COLS; c++) s += used[r * COLS + c] ? "█" : "·";
+              s += "\n";
+            }
+            p.textContent = s;
+            scrollBottom();
+            if (step++ % 9 === 0) click();
+            if (used.lastIndexOf(true) < used.indexOf(false)) {
+              clearInterval(iv);
+              done();
+            }
+          }, 35);
+        });
+        await type("优化完成：数据已连续存放，磁盘性能提升约 23%（心理作用）", "cyn");
+        print("");
+      }
+
+      /* SCANDISK：磁头逐簇扫描动画，半路发现并修复一处交叉链接簇 */
+      async function dosScandisk() {
+        var COLS = 36, ROWS = 9, TOTAL = COLS * ROWS;
+        var badPos = Math.floor(TOTAL * 0.55);
+        await type("ScanDisk for PaperClip DOS 6.22", "amb");
+        await type("正在检测介质描述符 ......... OK", "dim");
+        await type("正在检查文件分配表 ......... OK", "dim");
+        await type("正在逐簇扫描数据区（█ 未扫 · ▓ 正扫 · · 已扫）", "dim");
+        var p = print("", "cyn");
+        var pos = 0, fixed = false;
+        await new Promise(function (done) {
+          var iv = setInterval(function () {
+            if (leaving) { clearInterval(iv); done(); return; }
+            var s = "";
+            for (var i = 0; i < TOTAL; i++) {
+              s += i === badPos && fixed ? "★" : i < pos ? "·" : i === pos ? "▓" : "█";
+              if ((i + 1) % COLS === 0) s += "\n";
+            }
+            p.textContent = s;
+            scrollBottom();
+            if (pos % 24 === 0) click();
+            if (!fixed && pos > badPos) {
+              fixed = true;
+              beep(220, 0.25, 0.05, "square");
+            }
+            pos += 3;
+            if (pos >= TOTAL) { clearInterval(iv); done(); }
+          }, 40);
+        });
+        await type("发现交叉链接簇（第 0x2F41 簇）· 已自动修复", fixed ? "err" : "dim");
+        await type("ScanDisk 未在 C: 盘发现其它问题。今天算你走运。", "cyn");
+        print("");
+      }
+
+      /* Tab 补全：无空格时补命令名，有空格时补当前目录下的文件/目录名 */
+      var DOS_CMDS = ["autoexec.bat", "bbs", "bbs.exe", "cd", "chkdsk", "cls", "config.sys",
+        "date", "defrag", "del", "dir", "echo", "exit", "fdisk", "help", "label", "md",
+        "mem", "mkdir", "ping", "play", "rd", "readme.txt", "scandisk", "time", "tree",
+        "type", "ver", "vol", "win"];
+      function dosCompleter(v) {
+        var sp = v.lastIndexOf(" ");
+        var head = sp === -1 ? "" : v.slice(0, sp + 1);
+        var tok = (sp === -1 ? v : v.slice(sp + 1)).toLowerCase();
+        if (!tok) return [];
+        var pool = sp === -1
+          ? DOS_CMDS
+          : (DISK["C:\\" + cwd] || []).map(function (it) { return it.n; });
+        return pool.filter(function (n) {
+          return n.toLowerCase().indexOf(tok) === 0;
+        }).map(function (n) { return head + n; });
+      }
+
       async function dosDispatch(raw) {
         var line = raw.trim();
         var cmd = line.toLowerCase();
@@ -1466,8 +1695,74 @@
 
         if (cmd === "help" || cmd === "?") {
           await renderLines(dosHelp(), true);
-        } else if (cmd === "dir") {
-          await renderLines(dosDir(), false);
+        } else if (cmd === "dir" || cmd.indexOf("dir ") === 0) {
+          if (cmd.indexOf("/w") !== -1) {
+            /* DIR /W：宽行显示，一行三个名字，目录用 [名字] 括起 */
+            var names = (DISK["C:\\" + cwd] || []).map(function (it) {
+              return pad(it.d ? "[" + it.n + "]" : it.n, 16);
+            });
+            print("", "dim");
+            for (var wi = 0; wi < names.length; wi += 3) {
+              print(names.slice(wi, wi + 3).join(""));
+            }
+            print("", "dim");
+          } else {
+            await renderLines(dosDir(), false);
+          }
+        } else if (cmd === "tree") {
+          await renderLines(dosTree(), false);
+        } else if (cmd === "chkdsk") {
+          await renderLines(dosChkdsk(), true);
+        } else if (cmd === "scandisk") {
+          await dosScandisk();
+        } else if (cmd === "defrag") {
+          await dosDefrag();
+        } else if (cmd === "play") {
+          await playMidFile();
+        } else if (cmd.indexOf("md ") === 0 || cmd.indexOf("mkdir ") === 0) {
+          var nd = line.slice(line.indexOf(" ")).trim();
+          if (!nd) {
+            await type("用法：MD <目录名>", "err");
+          } else if (findEntry(nd)) {
+            await type("子目录或文件 " + nd + " 已存在。", "err");
+          } else {
+            if (!DISK["C:\\" + cwd]) DISK["C:\\" + cwd] = [];
+            DISK["C:\\" + cwd].push({ n: nd.toUpperCase(), d: true, t: dosStamp() });
+            await type("目录创建成功。DIR 可以看到它（重启后消失，虚拟磁盘）。", "dim");
+          }
+          print("");
+        } else if (cmd.indexOf("rd ") === 0) {
+          var rdName = line.slice(3).trim();
+          var rdIdx = entryIndex(rdName);
+          var rdEntry = rdIdx !== -1 ? DISK["C:\\" + cwd][rdIdx] : null;
+          var rdKey = "C:\\" + (cwd ? cwd + "\\" + rdEntry.n : rdName);
+          if (rdIdx === -1 || !rdEntry.d) {
+            await type("找不到目录 " + rdName + " 。", "err");
+          } else if (DISK[rdKey] && DISK[rdKey].length) {
+            await type("目录不是空的，先 DEL/删光里面的东西。", "err");
+          } else {
+            DISK["C:\\" + cwd].splice(rdIdx, 1);
+            delete DISK[rdKey];
+            await type("目录已删除。", "dim");
+          }
+          print("");
+        } else if (cmd.indexOf("del ") === 0) {
+          var delArg = line.slice(4).trim();
+          if (delArg === "*.*" || delArg === "*") {
+            await type("少年，冷静。这 540MB 里装着一个时代，全盘保留。", "err");
+          } else {
+            var delIdx = entryIndex(delArg);
+            var delEntry = delIdx !== -1 ? DISK["C:\\" + cwd][delIdx] : null;
+            if (delIdx === -1) {
+              await type("File not found（找不到 " + delArg + "）", "err");
+            } else if (delEntry.d) {
+              await type("那是目录，删目录请用 RD。", "err");
+            } else {
+              DISK["C:\\" + cwd].splice(delIdx, 1);
+              await type("已删除 " + delEntry.n + " 。回收站？1997 年还没有这东西。", "dim");
+            }
+          }
+          print("");
         } else if (cmd === "cd") {
           print("C:\\" + cwd);
         } else if (cmd === "cd.." || cmd.indexOf("cd ") === 0 || cmd.indexOf("cd\\") === 0) {
@@ -1514,8 +1809,29 @@
         } else if (cmd === "cls" || cmd === "clear") {
           screen.innerHTML = "";
         } else if (cmd === "win" || cmd === "windows") {
-          await type("此电脑未安装 Windows。1997 年的装机商说：先学会 DOS。", "amb");
+          /* win：假装启动 Win95，然后被内存管理器劝退 */
+          await type("Starting Windows 95 ...", "wht");
+          await sleep(900);
+          await type("EMM386: 检测到致命错误 06。内存管理器已罢工。", "err");
+          await type("（1997 年的装机商说得对：这台 486，先学会 DOS。）", "dim");
           print("");
+        } else if (cmd === "vol") {
+          print(" Volume in drive C is PAPERCLIP");
+          print(" Volume Serial Number is 1997-0830");
+          print("");
+        } else if (cmd.indexOf("label") === 0) {
+          await type("卷标写死在磁盘第 0 扇区了：PAPERCLIP，改不了。", "dim");
+          print("");
+        } else if (cmd.indexOf("echo") === 0) {
+          var echoMsg = line.slice(4).trim();
+          print(echoMsg ? echoMsg : "ECHO 处于打开状态。");
+          print("");
+        } else if (cmd === "fdisk") {
+          await type("FDISK：整块盘才 540MB，再分就什么都不剩了。已安全退出。", "err");
+          print("");
+        } else if (cmd === "exit") {
+          /* DOS 提示符下 EXIT = 关机，退出复古模式回到主页 */
+          exitRetro();
         } else if (cmd.indexOf("format") === 0) {
           await type("警告：C: 盘所有数据将丢失！……逗你的，这块盘我不舍得格。", "err");
           print("");
@@ -1550,15 +1866,56 @@
             print("");
           }
         } else {
-          print("Bad command or file name", "err");
+          /* 不是内部命令 → 尝试当作可执行文件运行：
+             先查当前目录，再按 AUTOEXEC 里的 PATH 查 C:\DOS、C:\BBS */
+          var tok = cmd.split(/\s+/)[0];
+          var exe = findEntry(tok) || (function () {
+            var pathDirs = ["C:\\DOS", "C:\\BBS"];
+            for (var pi = 0; pi < pathDirs.length; pi++) {
+              var arr = DISK[pathDirs[pi]] || [];
+              for (var xi = 0; xi < arr.length; xi++) {
+                if (arr[xi].n.toLowerCase() === tok) return arr[xi];
+              }
+            }
+            return null;
+          })();
+          var base = exe ? exe.n.toLowerCase() : "";
+
+          if (!exe) {
+            print("Bad command or file name", "err");
+          } else if (/\.bat$/.test(base) && exe.c) {
+            /* BAT：把每一行当命令回显执行 */
+            await renderLines(exe.c.map(function (t) { return ["  " + t, ""]; }), true);
+            print("");
+          } else if (/\.mid$/.test(base)) {
+            await playMidFile();
+          } else if (base === "mouse.com") {
+            await type("Mouse driver installed.（这块屏幕不支持指针，装了个寂寞）", "dim");
+            print("");
+          } else if (base === "smartdrv.exe") {
+            await type("SMARTDRV 磁盘缓存已加载：2048KB。", "dim");
+            print("");
+          } else if (base === "edit.com") {
+            await type("EDIT.COM 的磁盘扇区损坏了。看文本请用 TYPE。", "dim");
+            print("");
+          } else if (/\.exe$/.test(base) && base.indexOf("doom") === 0) {
+            await type("DOOM 需要 4MB 常规内存。很遗憾，DOS 只分给你 640K。", "err");
+            print("");
+          } else if (/\.exe$|\.com$/.test(base)) {
+            await type("Run-time error: Not enough memory（640K 永远不够用）。", "err");
+            print("");
+          } else {
+            print("Bad command or file name", "err");
+          }
         }
       }
 
       /* ---------------- DOS 主循环 ---------------- */
       async function dosLoop() {
         while (!leaving) {
+          completer = dosCompleter;   // DOS 提示符下启用 Tab 补全（BBS 挂断返回后也恢复）
           var raw = await ask(cwdPath());
-          if (leaving) return;
+          if (leaving) return;        // exit 关机后立即收尾
           if (!raw) continue;
           await dosDispatch(raw);
         }
