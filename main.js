@@ -18,7 +18,7 @@
    ============================================================ */
 
 /* 站点版本号：发版时只改这里，页脚自动同步显示 */
-const SITE_VERSION = "v0.1.0";
+const SITE_VERSION = "v0.2.0";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关

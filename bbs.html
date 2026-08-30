@@ -195,6 +195,36 @@
       overflow-x: auto;
     }
 
+    /* Braille 点阵横幅（PORTAL.EXE 的光圈 logo）：字符多、行宽大。
+       10px 是 720px 外壳内不横向滚动的上限（最长行 65 字符）；
+       全屏模式下内容宽度更大，可以再放大一档 */
+    #screen p.art.art-small {
+      font-size: 10px;
+      line-height: 1.15;
+    }
+
+    #crt.aperture #screen p.art.art-small {
+      font-size: 12.5px;
+    }
+
+    /* ---------- 全屏文字布局：整列靠左 + 2× 像素字号 ----------
+       全屏时不让文字拉满整个屏幕：限制 840px 列宽并贴屏幕左侧，
+       报表、点线、名册的最长行都不会折行；
+       16px 兼顾大屏可读性与点阵锐度 */
+    #crt.aperture #screen,
+    #crt.aperture #input-row {
+      width: 100%;
+      max-width: 840px;
+      margin-left: 48px;
+      margin-right: auto;
+      font-size: 16px;
+    }
+
+    #crt.aperture .cn { font-size: 24px; }
+
+    /* 全屏下 logo 也跟着列宽放大一档（盲文点阵为平滑缩放） */
+    #crt.aperture #screen p.art.art-small { font-size: 12px; line-height: 1; }
+
     /* ---------- 输入行：提示符 + 透明 input + 块状光标 ---------- */
     #input-row {
       display: none;
@@ -362,6 +392,74 @@
 
     #statusbar .right { color: #b8b8f0; overflow: hidden; text-overflow: ellipsis; }
 
+    /* ---------- PORTAL.EXE：光圈科技终端配色 ----------
+       终端里所有文字颜色都走 --fg/--yellow/--cyan 等 CSS 变量，
+       所以在 #crt 上换一套变量即可整体切换成 Portal 的蓝橙荧光；
+       所有层都挂了 transition：进入时老 CRT 渐变成干净的现代面板，
+       退出时再渐变回 1997 年的破屏幕 */
+    #crt {
+      transition: background 0.9s ease, color 0.9s ease, box-shadow 0.9s ease;
+    }
+
+    #screen {
+      transition: color 0.9s ease, text-shadow 0.9s ease;
+    }
+
+    #noise, #band { transition: opacity 0.9s ease; }
+    #statusbar { transition: background 0.9s ease; }
+    #crt::after, #crt::before { transition: opacity 0.9s ease; }
+
+    #crt.aperture {
+      --fg: #00A3FF;            /* Portal Blue：正文主色 */
+      --fg-dim: #7d8489;        /* 中性灰（Logo Dark Grey 提亮到可读） */
+      --yellow: #FF6B00;        /* Portal Orange：标题与强调 */
+      --cyan: #00A3FF;
+      --err: #ff5533;
+      --dos-blue: #333333;      /* 状态栏：Logo Dark Grey */
+      background: radial-gradient(ellipse at center, #141618 0%, #060707 70%);
+      color: var(--fg);         /* body 层已解析过继承色，这里必须显式重声明 */
+    }
+
+    /* 状态栏右侧文字：原配色偏紫，光圈模式里换成中性灰 */
+    #crt.aperture #statusbar .right { color: #a8adb0; }
+
+    /* 现代面板化：关噪点、关滚纹、停闪烁，扫描线与暗角淡化 */
+    #crt.aperture #screen { animation: none; }
+    #crt.aperture #noise, #crt.aperture #band { opacity: 0; }
+    #crt.aperture::after { opacity: 0.35; }
+    #crt.aperture::before { opacity: 0.45; }
+
+    /* ---------- 光圈模式全屏：现代面板铺满视口，退出时收缩回外壳 ----------
+       .aperture 挂上即展开（portal-in 动画）；退出时先挂 .portal-out 播放
+       收缩动画，动画结束后再摘掉两个类，回到 720px 的 486 显示器 */
+    #crt.aperture {
+      position: fixed;
+      inset: 10px;
+      z-index: 50;
+      max-width: none;
+      margin: 0;
+      animation: portal-in 0.7s ease;
+    }
+
+    @keyframes portal-in {
+      from { transform: scale(0.93); opacity: 0.3; filter: brightness(2.2); }
+      to   { transform: scale(1);    opacity: 1;   filter: brightness(1); }
+    }
+
+    #crt.portal-out { animation: portal-out 0.7s ease forwards; }
+
+    @keyframes portal-out {
+      from { transform: scale(1);    opacity: 1;   filter: brightness(1); }
+      to   { transform: scale(0.93); opacity: 0.3; filter: brightness(2.2); }
+    }
+
+    #crt.aperture #screen {
+      text-shadow:
+        1px 0 0 rgba(0, 163, 255, 0.22),
+        -1px 0 0 rgba(255, 107, 0, 0.16),
+        0 0 4px rgba(255, 255, 255, 0.18);
+    }
+
     /* ---------- 手机端 ---------- */
     @media (max-width: 640px) {
       body { padding: 10px; }
@@ -370,6 +468,10 @@
       #screen p.art { font-size: 12px; }
       .cn { font-size: 12px; }
       #power .pwr-txt { font-size: 12px; }
+      /* 光圈全屏在小屏上回到 1× 点阵字号与全宽列 */
+      #crt.aperture #screen, #crt.aperture #input-row { font-size: 12px; max-width: none; }
+      #crt.aperture .cn { font-size: 12px; }
+      #crt.aperture #screen p.art.art-small { font-size: 8px; }
     }
 
     /* 用户偏好减少动态效果：关掉闪烁、滚纹与噪点动画 */
@@ -377,6 +479,7 @@
       #screen, #mirror .m-cur { animation: none; }
       #crt.booting #screen { animation: none; }
       #band, #noise { animation: none; }
+      #crt.aperture, #crt.portal-out { animation: none; }
     }
   </style>
 </head>
@@ -752,6 +855,10 @@
         C: ["████", "█   ", "█   ", "█   ", "████"],
         L: ["█   ", "█   ", "█   ", "█   ", "████"],
         I: ["███ ", " █  ", " █  ", " █  ", "███ "],
+        T: ["████", " █  ", " █  ", " █  ", " █  "],
+        U: ["█  █", "█  █", "█  █", "█  █", "████"],
+        S: [" ███", "█   ", " ███", "   █", "███ "],
+        N: ["█  █", "██ █", "█ ██", "█  █", "█  █"],
       };
       function asciiArt(word) {
         var rows = ["", "", "", "", ""];
@@ -787,6 +894,7 @@
           ["[5] 留言板", "公开留言・同步GitHub"],
           ["[6] 在线用户", "看看谁在站上"],
           ["[7] 系统时间", "报时 + 机器档案"],
+          ["[8] MC 状态", "服务器实时查询"],
         ];
         var W = 42;  // 框内渲染列宽
         var lines = ["┌" + rep("─", W / 2) + "┐"];
@@ -878,17 +986,8 @@
       }
 
       /* 布告栏：静态公告 + MC 服务器实时状态查询 */
-      async function cmdBoard() {
-        await renderLines([
-          ["── 布告栏 · BULLETIN ────────────────────", "amb"],
-          ["  ▸ 本站由 Cloudflare Pages 提供骨干网络", ""],
-          ["    （比 1997 年的 33.6k 快了大约一百万倍）", "dim"],
-          ["  ▸ QQ 交流群：1046086485（现代模式 minecraft.html 可一键加群）", "dim"],
-          ["", "dim"],
-          ["── Minecraft 服务器 · 实时状态 ──────────", "amb"],
-          ["  正在连线查询 " + MC_HOST + ":" + MC_PORT + " ...", "dim"],
-        ], true);
-
+      /* 查询 MC 服务器并生成状态行（布告栏与 [8] 共用） */
+      async function queryMcRows() {
         var rows;
         try {
           var r = await fetchMcStatus();
@@ -908,6 +1007,31 @@
           rows = [["  ▸ 查询失败，接口不可达（也许你的电话线松了）", "err"]];
         }
         rows.push(["", "dim"]);
+        return rows;
+      }
+
+      /* [8] MC 状态：单独的实时查询板块 */
+      async function cmdMc() {
+        await renderLines([
+          ["── Minecraft 服务器 · 实时状态 ──────────", "amb"],
+          ["  正在连线查询 " + MC_HOST + ":" + MC_PORT + " ...", "dim"],
+        ], true);
+        var rows = await queryMcRows();
+        await renderLines(rows, true);
+      }
+
+      async function cmdBoard() {
+        await renderLines([
+          ["── 布告栏 · BULLETIN ────────────────────", "amb"],
+          ["  ▸ 本站由 Cloudflare Pages 提供骨干网络", ""],
+          ["    （比 1997 年的 33.6k 快了大约一百万倍）", "dim"],
+          ["  ▸ QQ 交流群：1046086485（现代模式 minecraft.html 可一键加群）", "dim"],
+          ["", "dim"],
+          ["── Minecraft 服务器 · 实时状态 ──────────", "amb"],
+          ["  正在连线查询 " + MC_HOST + ":" + MC_PORT + " ...", "dim"],
+        ], true);
+
+        var rows = await queryMcRows();
         await renderLines(rows, true);
 
         await renderLines([
@@ -1027,15 +1151,27 @@
 
       /* ---------------- 在线用户（趣味假数据） ---------------- */
       function cmdUsers() {
-        var guests = ["StarDust", "猫饭", "DeepBlue", "RAM_486", "电话线精灵"];
-        var pick = guests.sort(function () { return Math.random() - 0.5; }).slice(0, 2 + Math.floor(Math.random() * 3));
+        /* 20 人常驻池：每次上站随机洗牌，抽 5-8 个显示 */
+        var pool = [
+          "StarDust", "猫饭", "DeepBlue", "RAM_486", "电话线精灵",
+          "月之尘", "盆地回声", "BootLoader", "纸鹤", "终末地旅人",
+          "半张软盘", "回声_336", "Modem少女", "第7区网管", "像素旅人",
+          "33K猫", "纸板箱", "糖水Boy", "休眠舱住户", "飞飞",
+        ];
+        for (var i = pool.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+        }
+        var pick = pool.slice(0, 5 + Math.floor(Math.random() * 4));
+        var states = ["灌水中", "挂机中", "刷屏中", "看布告", "下棋中", "发呆中", "下载中", "潜水中"];
         var rows = [
           ["── 在线用户 · WHO ───────────────────────", "amb"],
           ["  " + pad("呼号", 14) + pad("节点", 8) + "状态", "dim"],
         ];
         rows.push(["  " + pad("SysOp(PaperClip)", 14) + pad("#0", 8) + "管着站", "cyn"]);
-        pick.forEach(function (n, i) {
-          rows.push(["  " + pad(n, 14) + pad("#" + (i + 1), 8) + "灌水中", ""]);
+        pick.forEach(function (nm, i) {
+          var st = states[Math.floor(Math.random() * states.length)];
+          rows.push(["  " + pad(nm, 14) + pad("#" + (i + 1), 8) + st, ""]);
         });
         rows.push(["  " + pad(handle, 14) + pad("#" + (pick.length + 1), 8) + "刚上线", "amb"]);
         rows.push(["", "dim"]);
@@ -1220,6 +1356,8 @@
             ["    （草稿仅本机可见 · msg send 可去联系页发布公开留言）", "dim"]], true);
         } else if (cmd === "6" || cmd === "who" || cmd === "users" || cmd === "在线") {
           await renderLines(cmdUsers(), true);
+        } else if (cmd === "8" || cmd === "mc" || cmd === "server" || cmd === "服务器") {
+          await cmdMc();
         } else if (cmd === "7" || cmd === "time" || cmd === "date" || cmd === "时间") {
           await renderLines(cmdTime(), true);
         } else if (cmd === "fortune" || cmd === "签") {
@@ -1268,7 +1406,7 @@
       }
 
       /* ============================================================
-         bbs.exe 程序本体：拨号 → 横幅 → 登录 → 菜单循环
+         bbs.com 程序本体：拨号 → 横幅 → 登录 → 菜单循环
          ============================================================ */
       async function runBBS() {
         bbsEnded = false;
@@ -1351,11 +1489,11 @@
         "╚" + rep("═", 19) + "╝",
         "",
         "",
-        " 1. 输入 bbs 运行 BBS.EXE，拨号上站",
+        " 1. 输入 bbs.com 运行 BBS.COM，拨号上站",
         " 2. 输入 dir 看看硬盘里还藏了什么",
         " 3. 输入 ping 查 MC 服务器在不在线",
         " 4. 输入 scandisk / defrag 给硬盘做个体检",
-        " 5. 输入 tree 看目录树 · 按 TAB 补全文件名",
+        " 5. 输入 portal 运行一张不属于这里的软盘",
         "",
         " ※ 1997 年最好的上网方式：电话线 + 耐心。",
       ];
@@ -1386,7 +1524,7 @@
           { n: "COMMAND.COM",  s: 93890, t: "05-30-97  9:20a" },
         ],
         "C:\\BBS": [
-          { n: "BBS.EXE",   s: 48640, t: "06-12-97  8:45p" },
+          { n: "BBS.COM",   s: 48640, t: "06-12-97  8:45p" },
           { n: "SYSOP.TXT", s: 1024, t: "06-12-97  8:50p", c: [
             "SysOp = PaperClip（回形针）",
             "在校学生 · 边学边玩 · 折腾网页/MC/终末地。",
@@ -1406,10 +1544,21 @@
         "C:\\GAMES": [
           { n: "DOOM",        d: true, t: "07-02-97  10:02p" },
           { n: "仙剑奇侠传",  d: true, t: "07-20-97  11:40p" },
+          { n: "PORTAL",      d: true, t: "03-15-98  2:20p" },
           { n: "SANGO.TXT",   s: 512, t: "07-20-97  11:42p", c: [
             "《仙剑奇侠传》通关感想（含剧透）：",
             "锁妖塔塌下来那一刻，谁没哭过呢。",
             "—— 4 张软盘装下了一个时代。",
+          ] },
+        ],
+        "C:\\GAMES\\PORTAL": [
+          { n: "PORTAL.EXE", s: 715123, t: "03-15-98  2:21p" },
+          { n: "APERTURE.TXT", s: 1024, t: "03-15-98  2:25p", c: [
+            "光圈科技员工内部备忘（请勿外传）：",
+            "1. 如果你听到任何关于\"蛋糕\"的承诺，请立即忽略。",
+            "2. 不要与哨兵炮塔对视，它们只是想交个朋友。",
+            "3. 这张软盘的出厂日期是 2007 年。没人知道它",
+            "   为什么出现在 1997 年的硬盘里。别问。",
           ] },
         ],
         "C:\\GAMES\\DOOM": [
@@ -1443,22 +1592,22 @@
 
       function dosHelp() {
         return [
-          ["── PaperClip DOS 内部命令 ───────────────", "amb"],
-          ["  " + pad("DIR", 12) + "查看目录（DIR /W 宽行）", ""],
-          ["  " + pad("CD", 12) + "切换目录（cd bbs / cd ..）", ""],
-          ["  " + pad("TYPE", 12) + "查看文本文件", ""],
-          ["  " + pad("TREE", 12) + "目录树", ""],
-          ["  " + pad("MD / RD / DEL", 12) + "建删目录 / 删文件", ""],
-          ["  " + pad("CHKDSK", 12) + "磁盘空间报表", ""],
-          ["  " + pad("SCANDISK", 12) + "扫描磁盘（有动画）", ""],
-          ["  " + pad("DEFRAG", 12) + "整理磁盘碎片（有动画）", ""],
-          ["  " + pad("MEM", 12) + "内存报表", ""],
-          ["  " + pad("PLAY", 12) + "播放 PLAY.MID（FM 合成）", ""],
-          ["  " + pad("VER/DATE/TIME/VOL", 12) + "版本 / 时钟 / 卷标", ""],
-          ["  " + pad("CLS / EXIT", 12) + "清屏 / 关机退出", ""],
+          ["── PaperClip DOS 命令 ───────────────────", "amb"],
+          ["  " + pad("DIR", 12) + "显示磁盘目录。", ""],
+          ["  " + pad("CD", 12) + "显示或改变当前目录。", ""],
+          ["  " + pad("TYPE", 12) + "显示文本文件的内容。", ""],
+          ["  " + pad("TREE", 12) + "以图形显示驱动器目录结构。", ""],
+          ["  " + pad("MD / RD / DEL", 12) + "创建、删除目录与删除文件。", ""],
+          ["  " + pad("CHKDSK", 12) + "检查磁盘并显示状态报告。", ""],
+          ["  " + pad("SCANDISK", 12) + "检查文件系统与磁盘表面。", ""],
+          ["  " + pad("DEFRAG", 12) + "重新整理磁盘上的文件。", ""],
+          ["  " + pad("MEM", 12) + "显示内存使用情况。", ""],
+          ["  " + pad("PLAY", 12) + "播放 MIDI 音乐文件。", ""],
+          ["  " + pad("VER / VOL", 12) + "显示 DOS 版本与磁盘卷标。", ""],
+          ["  " + pad("DATE / TIME", 12) + "显示或设置日期与时间。", ""],
+          ["  " + pad("CLS / EXIT", 12) + "清除屏幕 / 关闭计算机。", ""],
           ["", "dim"],
-          ["  ★ 输入 BBS 运行 BBS.EXE 拨号上站", "amb"],
-          ["  ★ 输入时按 TAB 可补全命令与文件名", "dim"],
+          ["  BBS 拨号上站 · PORTAL 光圈科技终端 · TAB 补全。", "dim"],
           ["", "dim"],
         ];
       }
@@ -1472,6 +1621,10 @@
           [" C:\\" + cwd + " 的目录", "dim"],
           ["", "dim"],
         ];
+        if (cwd) {
+          rows.push([pad(".", 14) + "<DIR>     " + "08-30-97  9:00a", "cyn"]);
+          rows.push([pad("..", 14) + "<DIR>     " + "08-30-97  9:00a", "cyn"]);
+        }
         var files = 0, bytes = 0;
         items.forEach(function (it) {
           var meta = it.d ? "<DIR>     " : pad(fmtNum(it.s || 0), 10);
@@ -1480,7 +1633,7 @@
         });
         rows.push(["", "dim"]);
         rows.push(["        " + files + " 个文件      " + fmtNum(bytes) + " 字节", "dim"]);
-        rows.push(["                  12,273,920 字节可用", "dim"]);
+        rows.push(["        " + (cwd ? "2 个目录  " : "") + "12,273,920 字节可用", "dim"]);
         rows.push(["", "dim"]);
         return rows;
       }
@@ -1488,13 +1641,13 @@
       function dosMem() {
         return [
           ["", "dim"],
-          ["  内存类型          总数       已用       空闲", "amb"],
+          ["内存类型        总数     =   已用  +   空闲", "amb"],
           ["  ────────────────────────────────────────────", "dim"],
-          ["  常规内存        655,360     67,840    587,520", ""],
-          ["  上位内存块      655,360          0    655,360", ""],
-          ["  扩展内存(XMS) 7,340,032  1,048,576  6,291,456", ""],
+          ["常规内存          640K       67K       573K", ""],
+          ["上位内存块         91K        0K        91K", ""],
+          ["扩展内存(XMS)  15,296K     1,024K   14,272K", ""],
           ["", "dim"],
-          ["  DOS 已常驻高端内存区。640K 对谁都足够用了。", "dim"],
+          ["最大可执行程序大小        573K (586,752 字节)", ""],
           ["", "dim"],
         ];
       }
@@ -1549,21 +1702,130 @@
       function dosChkdsk() {
         return [
           ["", "dim"],
-          ["  卷 PAPERCLIP 创建于 06-12-1997 8:45", ""],
-          ["  卷的序列号 1997-0830", ""],
+          ["卷 PAPERCLIP 创建了 06-12-1997 8:45", ""],
+          ["卷序列号为 1997-0830", ""],
           ["", "dim"],
-          ["  540,274,688 字节 · 磁盘总空间", ""],
-          ["      2,048 字节 · 每个分配单元", ""],
-          ["     12,273,920 字节 · 磁盘可用", ""],
-          ["             0 字节 · 坏扇区（谢天谢地）", "cyn"],
+          ["540,274,688 字节       磁盘总空间", ""],
+          ["        2,048 字节     每个分配单元", ""],
+          ["    12,273,920 字节    磁盘可用", ""],
+          ["            0 字节     坏扇区", ""],
           ["", "dim"],
-          ["  655,360 字节 · 常规内存总空间", ""],
-          ["     587,520 字节 · 常规内存可用", ""],
+          ["    655,360 字节       常规内存总空间", ""],
+          ["    587,520 字节       常规内存可用", ""],
           ["", "dim"],
         ];
       }
 
       /* PLAY.MID：用方波 FM 音色真的放一段《致爱丽丝》开头 */
+      /* ---- 迷你 MIDI 播放器：解析 .mid 文件，用 WebAudio 排程合成 ---- */
+      function parseMidi(buf) {
+        var d = new DataView(buf), p = 0;
+        function u32() { var v = d.getUint32(p); p += 4; return v; }
+        function u16() { var v = d.getUint16(p); p += 2; return v; }
+        function u8() { return d.getUint8(p++); }
+        function vlq() {
+          var v = 0;
+          for (;;) {
+            var b = u8();
+            v = (v << 7) | (b & 0x7f);
+            if (!(b & 0x80)) return v;
+          }
+        }
+        function str4() {
+          var t = "";
+          for (var i = 0; i < 4; i++) t += String.fromCharCode(u8());
+          return t;
+        }
+        if (str4() !== "MThd") throw new Error("not midi");
+        var hlen = u32();
+        u16();                       // 格式号，不关心
+        var ntrk = u16();
+        var div = u16();
+        p += hlen - 6;
+        if (div & 0x8000) throw new Error("smpte");   // 不支持 SMPTE 时基
+        var evs = [], tempos = [];
+        while (ntrk-- > 0) {
+          if (str4() !== "MTrk") throw new Error("bad track");
+          var tlen = u32(), end = p + tlen;
+          var tick = 0, run = 0;
+          while (p < end) {
+            tick += vlq();
+            var st = u8();
+            if (st < 0x80) { p--; st = run; } else run = st;   // 运行状态
+            if (st === 0xff) {
+              var type = u8(), mlen = vlq();
+              if (type === 0x51 && mlen === 3) {
+                tempos.push({ t: tick, us: (u8() << 16) | (u8() << 8) | u8() });
+              } else p += mlen;
+            } else if (st === 0xf0 || st === 0xf7) {
+              p += vlq();
+            } else {
+              var cmd = st & 0xf0;
+              if (cmd === 0x90 || cmd === 0x80) {
+                var note = u8(), vel = u8();
+                evs.push({ n: note, t: tick, v: vel, ch: st & 0x0f, on: cmd === 0x90 && vel > 0 });
+              } else if (cmd === 0xc0 || cmd === 0xd0) { u8(); }
+              else { u8(); u8(); }
+            }
+          }
+          p = end;
+        }
+        /* tick → 秒：按 tempo 变化分段折算 */
+        var tp = tempos.slice().sort(function (a, b) { return a.t - b.t; });
+        if (!tp.length || tp[0].t > 0) tp.unshift({ t: 0, us: 500000 });
+        function tickToSec(tick) {
+          var sec = 0, pt = 0, us = 500000;
+          for (var i = 0; i < tp.length && tp[i].t <= tick; i++) {
+            sec += (tp[i].t - pt) * us / div / 1000000;
+            pt = tp[i].t; us = tp[i].us;
+          }
+          return sec + (tick - pt) * us / div / 1000000;
+        }
+        /* 配对 note-on/off → 音符列表 */
+        evs.sort(function (a, b) { return a.t - b.t; });
+        var open = {}, out = [];
+        evs.forEach(function (e) {
+          var key = e.ch + ":" + e.n;
+          if (e.on) {
+            open[key] = { n: e.n, t0: tickToSec(e.t), v: e.v, ch: e.ch };
+          } else if (open[key]) {
+            var o = open[key];
+            o.dur = tickToSec(e.t) - o.t0;
+            if (o.dur > 0.03) out.push(o);
+            delete open[key];
+          }
+        });
+        out.sort(function (a, b) { return a.t0 - b.t0; });
+        return out;
+      }
+
+      /* 把音符列表排程到 WebAudio：三角波主旋律 + 鼓组通道跳过 */
+      function playMidiNotes(notes) {
+        if (!ac || muted || !notes.length) return 0;
+        if (notes.length > 1500) notes = notes.slice(0, 1500);
+        var t0 = ac.currentTime + 0.25, end = t0;
+        notes.forEach(function (o) {
+          if (o.ch === 9) return;                    // 打击乐通道不发声
+          var f = 440 * Math.pow(2, (o.n - 69) / 12);
+          var v = Math.min(0.15, (o.v || 80) / 127 * 0.16);
+          var g = ac.createGain();
+          g.gain.setValueAtTime(0, t0 + o.t0);
+          g.gain.linearRampToValueAtTime(v, t0 + o.t0 + 0.012);
+          g.gain.setValueAtTime(v * 0.75, t0 + o.t0 + Math.max(0.03, o.dur - 0.06));
+          g.gain.linearRampToValueAtTime(0, t0 + o.t0 + o.dur);
+          var osc = ac.createOscillator();
+          osc.type = "triangle";
+          osc.frequency.value = f;
+          osc.connect(g); g.connect(master);
+          osc.start(t0 + o.t0); osc.stop(t0 + o.t0 + o.dur + 0.03);
+          trackSfx(osc);
+          if (t0 + o.t0 + o.dur > end) end = t0 + o.t0 + o.dur;
+        });
+        return (end - ac.currentTime) * 1000;
+      }
+
+      var midiPlaying = false;   // 有真 MIDI 在后台播放时为 true
+
       function playMidi() {
         if (!ac || muted) return 0;
         var f = { E5: 659.26, Ds5: 622.25, D5: 587.33, C5: 523.25, B4: 493.88,
@@ -1578,11 +1840,35 @@
         return (t - ac.currentTime) * 1000;
       }
 
+      var PLAY_MID_URL = "Never%20Gonna%20Give%20You%20Up.mid";
+
       async function playMidFile() {
-        await type("正在通过 OPL3 FM 合成器播放 PLAY.MID ...", "dim");
-        var dur = playMidi();
-        await sleep(dur || 4200);
-        print("播放完毕。这是属于 386 声卡的音色。", "dim");
+        /* play 是开关：播放中再输入一次 = 停止 */
+        if (midiPlaying) {
+          stopAllSfx();
+          midiPlaying = false;
+          await type("已停止。", "dim");
+          print("");
+          return;
+        }
+        await type("正在装载 PLAY.MID，通过板载合成器后台播放 ...", "dim");
+        var dur = 0;
+        try {
+          var r = await fetch(PLAY_MID_URL);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          dur = playMidiNotes(parseMidi(await r.arrayBuffer()));
+        } catch (e) { dur = 0; }
+        if (dur) {
+          midiPlaying = true;
+          setTimeout(function () { midiPlaying = false; }, dur);
+          await type("后台播放中（约 " + Math.round(dur / 600) / 10 +
+            " 分钟）。再输入一次 play 停止。", "cyn");
+        } else {
+          await type("MIDI 装载失败，改放内置小曲。", "dim");
+          var d2 = playMidi();
+          await sleep(d2 || 4200);
+          await type("播放完毕。这是属于 386 声卡的音色。", "dim");
+        }
         print("");
       }
 
@@ -1663,7 +1949,7 @@
       }
 
       /* Tab 补全：无空格时补命令名，有空格时补当前目录下的文件/目录名 */
-      var DOS_CMDS = ["autoexec.bat", "bbs", "bbs.exe", "cd", "chkdsk", "cls", "config.sys",
+      var DOS_CMDS = ["autoexec.bat", "bbs", "bbs.com", "cd", "chkdsk", "cls", "config.sys",
         "date", "defrag", "del", "dir", "echo", "exit", "fdisk", "help", "label", "md",
         "mem", "mkdir", "ping", "play", "rd", "readme.txt", "scandisk", "time", "tree",
         "type", "ver", "vol", "win"];
@@ -1685,10 +1971,18 @@
         var cmd = line.toLowerCase();
         if (!cmd) return;
 
-        /* bbs.exe：重头戏，拨号上站 */
-        if (cmd === "bbs" || cmd === "bbs.exe") {
+        /* bbs.com：重头戏，拨号上站 */
+        if (cmd === "bbs" || cmd === "bbs.com") {
           print("");
           await runBBS();
+          if (!leaving) print("");
+          return;
+        }
+
+        /* portal.exe：光圈科技终端（来自未来的软盘） */
+        if (cmd === "portal" || cmd === "portal.exe") {
+          print("");
+          await runPortal();
           if (!leaving) print("");
           return;
         }
@@ -1728,7 +2022,6 @@
           } else {
             if (!DISK["C:\\" + cwd]) DISK["C:\\" + cwd] = [];
             DISK["C:\\" + cwd].push({ n: nd.toUpperCase(), d: true, t: dosStamp() });
-            await type("目录创建成功。DIR 可以看到它（重启后消失，虚拟磁盘）。", "dim");
           }
           print("");
         } else if (cmd.indexOf("rd ") === 0) {
@@ -1737,29 +2030,27 @@
           var rdEntry = rdIdx !== -1 ? DISK["C:\\" + cwd][rdIdx] : null;
           var rdKey = "C:\\" + (cwd ? cwd + "\\" + rdEntry.n : rdName);
           if (rdIdx === -1 || !rdEntry.d) {
-            await type("找不到目录 " + rdName + " 。", "err");
+            await type("无效的路径，非目录，或目录非空。", "err");
           } else if (DISK[rdKey] && DISK[rdKey].length) {
-            await type("目录不是空的，先 DEL/删光里面的东西。", "err");
+            await type("无效的路径，非目录，或目录非空。", "err");
           } else {
             DISK["C:\\" + cwd].splice(rdIdx, 1);
             delete DISK[rdKey];
-            await type("目录已删除。", "dim");
           }
           print("");
         } else if (cmd.indexOf("del ") === 0) {
           var delArg = line.slice(4).trim();
           if (delArg === "*.*" || delArg === "*") {
-            await type("少年，冷静。这 540MB 里装着一个时代，全盘保留。", "err");
+            await type("C:\\*.* 全部文件将被删除! 是否 (Y/N)? N", "");
           } else {
             var delIdx = entryIndex(delArg);
             var delEntry = delIdx !== -1 ? DISK["C:\\" + cwd][delIdx] : null;
             if (delIdx === -1) {
-              await type("File not found（找不到 " + delArg + "）", "err");
+              await type("找不到文件 - " + delArg.toUpperCase(), "err");
             } else if (delEntry.d) {
-              await type("那是目录，删目录请用 RD。", "err");
+              await type("那是目录。请使用 RD。", "err");
             } else {
               DISK["C:\\" + cwd].splice(delIdx, 1);
-              await type("已删除 " + delEntry.n + " 。回收站？1997 年还没有这东西。", "dim");
             }
           }
           print("");
@@ -1776,7 +2067,7 @@
             if (hit && hit.d) {
               cwd = cwd ? cwd + "\\" + hit.n : hit.n;
             } else {
-              await type("找不到路径 " + arg + " 。先 DIR 看看有什么吧。", "err");
+              await type("无效的目录。", "err");
               print("");
             }
           }
@@ -1784,12 +2075,10 @@
           var f = cmd.slice(5).trim();
           var entry = findEntry(f);
           if (!entry) {
-            await type("找不到文件 " + f + " 。", "err");
+            await type("找不到文件 - " + f.toUpperCase(), "err");
             print("");
           } else if (!entry.c) {
             print("†°Æ►?∂ì" + Math.random().toString(36).slice(2, 8).toUpperCase() + "!!#@ ", "dim");
-            await type("  （二进制文件，TYPE 看不了，直接运行它试试）", "dim");
-            print("");
           } else {
             await renderLines(entry.c.map(function (t) { return [t, ""]; }), true);
             print("");
@@ -1810,10 +2099,7 @@
           screen.innerHTML = "";
         } else if (cmd === "win" || cmd === "windows") {
           /* win：假装启动 Win95，然后被内存管理器劝退 */
-          await type("Starting Windows 95 ...", "wht");
-          await sleep(900);
-          await type("EMM386: 检测到致命错误 06。内存管理器已罢工。", "err");
-          await type("（1997 年的装机商说得对：这台 486，先学会 DOS。）", "dim");
+          await type("This program cannot be run in DOS mode.", "err");
           print("");
         } else if (cmd === "vol") {
           print(" Volume in drive C is PAPERCLIP");
@@ -1833,36 +2119,40 @@
           /* DOS 提示符下 EXIT = 关机，退出复古模式回到主页 */
           exitRetro();
         } else if (cmd.indexOf("format") === 0) {
-          await type("警告：C: 盘所有数据将丢失！……逗你的，这块盘我不舍得格。", "err");
+          await type("警告：C: 盘上所有数据将会丢失!", "err");
+          await type("是否继续 (Y/N)? N", "");
+          await type("未格式化。磁盘处于写保护状态。", "dim");
+          print("");
           print("");
         } else if (cmd === "edit") {
-          await type("EDIT.COM 的磁盘扇区损坏了。看文本请用 TYPE。", "dim");
+          await type("EDIT 已被 SysOp 删除。查看文本请使用 TYPE。", "dim");
           print("");
         } else if (cmd === "doom") {
-          await type("DOOM 需要 4MB 常规内存。很遗憾，DOS 只分给你 640K。", "err");
+          await type("程序太大，无法装入内存。", "err");
           print("");
         } else if (cmd.indexOf("ping") === 0) {
           /* ping：查询 Minecraft 服务器实时状态（联网） */
           var host = cmd.slice(4).trim() || MC_HOST;
-          await type("正在 Ping " + host + " ...", "dim");
+          await type("正在 Ping " + host + " [33.6.199.7] 具有 32 字节的数据:", "dim");
           if (host.indexOf(MC_HOST) !== -1) {
             try {
               var st = await fetchMcStatus();
               if (st.status === "online") {
-                print("来自 " + MC_HOST + ":" + MC_PORT + " 的回复: 在线 · " + (st.version || "未知版本"), "cyn");
+                print("来自 " + MC_HOST + " 的回复: 字节=32 时间=1997ms TTL=97", "cyn");
+                print("服务器状态: 在线 · " + (st.version || "未知版本"), "");
                 print("在线玩家: " + ((st.players && st.players.online) != null ? st.players.online : "?") +
                   " / " + ((st.players && st.players.max) != null ? st.players.max : "?"), "");
                 var mtxt = (typeof st.pureMotd === "string" && st.pureMotd) || mcMotdText(st.motd);
                 if (mtxt) print("MOTD: " + mtxt.replace(/\n+/g, " "), "dim");
               } else {
-                print("请求超时。服务器不在线（又炸了）。", "err");
+                print("请求超时。服务器不在线。", "err");
               }
             } catch (e2) {
-              await type("Ping 失败：查询接口不可达。", "err");
+              await type("Ping 请求超时。", "err");
               print("");
             }
           } else {
-            await type("Ping 请求超时（这台 486 只认识 " + MC_HOST + "）。", "err");
+            await type("Ping 请求超时。", "err");
             print("");
           }
         } else {
@@ -1890,19 +2180,19 @@
           } else if (/\.mid$/.test(base)) {
             await playMidFile();
           } else if (base === "mouse.com") {
-            await type("Mouse driver installed.（这块屏幕不支持指针，装了个寂寞）", "dim");
+            await type("鼠标驱动程序已安装。", "dim");
             print("");
           } else if (base === "smartdrv.exe") {
-            await type("SMARTDRV 磁盘缓存已加载：2048KB。", "dim");
+            await type("磁盘高速缓存程序已装载 (2048KB)。", "dim");
             print("");
           } else if (base === "edit.com") {
-            await type("EDIT.COM 的磁盘扇区损坏了。看文本请用 TYPE。", "dim");
+            await type("EDIT 已被 SysOp 删除。查看文本请使用 TYPE。", "dim");
             print("");
           } else if (/\.exe$/.test(base) && base.indexOf("doom") === 0) {
-            await type("DOOM 需要 4MB 常规内存。很遗憾，DOS 只分给你 640K。", "err");
+            await type("程序太大，无法装入内存。", "err");
             print("");
           } else if (/\.exe$|\.com$/.test(base)) {
-            await type("Run-time error: Not enough memory（640K 永远不够用）。", "err");
+            await type("内存不足。", "err");
             print("");
           } else {
             print("Bad command or file name", "err");
@@ -1921,6 +2211,293 @@
         }
       }
 
+      /* ============================================================
+         PORTAL.EXE —— 光圈科技终端模拟（还原 Portal 内的 CRT 终端）
+         切换蓝色荧光配色（#crt.aperture 变量覆盖），ASCII 光圈标志、
+         GLaDOS 风格欢迎词与若干终端指令；exit 返回 DOS 并恢复配色。
+         ============================================================ */
+      /* 光圈科技 Braille 点阵 Logo（社区流传版）：光圈标志 + APERTURE 方块字。
+         盲文区段 U+2800 不在像素字体覆盖内，会回退到系统等宽字体，
+         等宽即可保证对齐；每行配 delay（毫秒）逐行读出，模拟老光盘加载。
+         cls 用 art art-small amb：小字号避免横向滚动 */
+      var APERTURE_LOGO = [
+        ["⠀⠀⠀⠀⢀⡠⣤⣶⣶⣶⣦⡄⣀", 60],
+        ["⠀⠀⢀⣴⣿⣿⣶⣝⡻⣿⣿⣇⣿⣷⣄", 120],
+        ["⠀⣠⡿⠿⢿⣛⠛⠋⠉⠈⠙⠿⢸⣿⣿⡷⣀⣀⠀⠀⠀⢀⣀⣀⣀⡀⠀⠀⣀⣀⣀⣀⡀⠀⣀⣀⣀⣀⠀⢀⣀⣀⣀⣀⣀⠀⣀⣀⠀⠀⣀⡀⠀⢀⣀⣀⣀⡀⠀⠀⣀⣀⣀⣀⡀", 400],
+        ["⠀⣶⣿⣿⡿⠁⠀⠀⠀⠀⠀⠀⠘⣿⢟⣼⣿⣿⡆⠀⠀⣾⣿⠛⣻⣿⠀⢸⣿⠟⠛⠛⠀⢸⣿⠟⢻⣿⡇⠘⠛⣿⣿⠛⠛⢀⣿⡟⠀⢰⣿⡇⠀⣿⡿⠛⣿⣿⠀⢰⣿⠟⠛⠛⠀", 150],
+        ["⠠⣿⣿⣟⡆⠀⠀⠀⠀⠀⠀⠀⠀⢋⣾⣿⣬⣿⣇⠀⢠⣿⡿⠿⠿⠋⠀⣾⡿⠛⠛⠇⠀⣾⣿⠿⣿⣯⠀⠀⢠⣿⡏⠀⠀⢸⣿⠃⠀⣼⣿⠀⢰⣿⡿⢿⣿⡅⠀⣾⣿⠛⠛⠇⠀", 60],
+        ["⠀⣿⢯⣾⣿⠀⠀⠀⠀⠀⠀⠀⠠⠿⠟⠉⠉⠿⠿⠀⠸⠿⠃⠀⠀⠀⠰⠿⠿⠿⠿⠃⠠⠿⠇⠠⠿⠯⠀⠀⠸⠿⠁⠀⠀⠘⠿⣷⡾⠿⠃⠀⠼⠿⠀⠸⠿⠅⠠⠿⠿⠿⠿⠃⠀", 150],
+        ["⠀⠀⣿⣿⣿⡼⣦⣄⢀⣀⣤⣤⣴⣶⣶⡿⠁⠀⡆⠀⠀⢀⣶⡄⠀⢰⣖⣲⠀⢠⡖⠒⡆⠀⢰⣖⡦⠀⢀⣴⡄⠀⠒⣶⠒⠀⣰⠖⢲⠀⠀⣶⣲⠄⠀⡆⠀⢰⣒⡂⠀⣶⣒⡆⠀", 400],
+        ["⠀⠀⠈⠻⣿⡇⣿⣿⣷⣮⣻⢿⣿⡿⠏⠀⠀⠀⠓⠲⠀⠞⠉⠹⠀⠘⠓⠚⠀⠈⠳⠖⠃⠀⠸⠀⠗⠀⠞⠉⠹⠂⠀⠻⠀⠀⠘⠲⠞⠀⠀⠇⠘⠆⠀⠇⠀⠘⠒⠆⠀⠓⠶⠃⠀", 60],
+        ["⠀⠀⠀⠀⠈⠙⠘⠿⠿⠿⠟⠓⠉", 60],
+      ];
+
+      var APERTURE_FOOTER = [
+        ["  ── APERTURE SCIENCE · 光圈科技 · 丰富学习中心终端 v3.11 ──", "dim"],
+        ["  \"我们做必须做的，因为我们可以。\" —— 这是 Cave 说的，现在由我变成真的。", "dim"],
+        ["", "dim"],
+      ];
+
+      var GLADOS_LINES = [
+        "数据显示你做得……还行。这个评价是我能给出的最高赞美，别习惯。",
+        "关于蛋糕的承诺已全部撤回。撤回原因：那是谎言，而谎言让我愉快。",
+        "如果你在走廊里碰到会说话的墙，请无视。它比我烦人。",
+        "本中心 98% 的测试对象存活。这个数字是四舍五入的，但听起来舒服就好。",
+        "本中心不生产柠檬，也不承认任何\"柠檬\"相关的承诺。柠檬是Cave的执念。",
+        "你看起来很眼熟。哦，上一批穿同款长跳靴的人，也没活到最后。",
+        "重量伙伴方块不会背叛你。它连话都不会说，比人可靠多了。",
+        "别碰运算核心。它们每一个都比你的全部器官值钱。",
+      ];
+
+      var SCIENCE_LINES = [
+        "光圈科技：先发射，后瞄准。",
+        "光圈科技：科学不是错误，是还没写进报告的意外。",
+        "光圈科技：跳之前签字，签完就不后悔了。",
+        "光圈科技：我们做必须做的，因为我们可以 —— 而且我们乐意。",
+        "光圈科技：浴帘起家，传送门收尾，中间全是事故。",
+        "光圈科技：昨天的未来，就是今天。今天的未来，看我们心情。",
+      ];
+
+      var CAVE_LINES = [
+        "\"当生活给你柠檬，别做柠檬水。把柠檬烧了 —— 然后研究灰烬。\"",
+        "\"我不是商人，我是发明家。商人才需要守规矩。\"",
+        "\"科学不是问'为什么'，是喊'为什么不' —— 然后有人去收拾残局。\"",
+        "\"租条破冰船，装上传送门，剩下的交给物理定律。\"",
+        "（备注：Cave Johnson 因汞中毒和月球粉尘去世。",
+        "  但他的口号比他的肺活量持久。）",
+      ];
+
+      var HISTORY_ROWS = [
+        ["── 公司历史 · 我本来不被允许念这一段 ──", "amb"],
+        ["  1943  光圈固定装置公司：浴帘公司。创始人的", ""],
+        ["        梦想是让浴帘更防水 —— 后来他改了主意。", ""],
+        ["  1950s 光圈科学开拓者：迁入密歇根废弃盐矿，", ""],
+        ["        深 4500 米。试验员从运动员和退伍军人中", ""],
+        ["        招募，因为普通人会跑。", "dim"],
+        ["  1970s 光圈：政府转投黑山基地，我们改用", ""],
+        ["        流浪汉 —— 免费，且没人找他们。破冰船", "dim"],
+        ["        \"北极光号\"连同技术一起消失，就当没发生过。", "dim"],
+        ["  1986  GLaDOS 计划：意识来源先是创始人本人，", ""],
+        ["        后换成秘书 Caroline。她更好控制。", ""],
+        ["  199_  GLaDOS 启用：当天，几乎所有人都死了。", ""],
+        ["        剩下的人，你们现在叫我\"系统\"。", "err"],
+        ["", "dim"],
+        ["  ※ 这一段我不会念，你也别记。", "dim"],
+        ["", "dim"],
+      ];
+
+      var PRODUCT_ROWS = [
+        ["── 光圈科技产品目录 ─────────────────────", "amb"],
+        ["  手持传送门装置 ... ASHPD · 俗称\"枪\"，其实更像个玩具。", ""],
+        ["  三色凝胶 ......... 加速 / 弹跳 / 转换 —— 涂上去就有惊喜。", ""],
+        ["  反重力缓冲靴 ..... 让你摔得好看一点。", ""],
+        ["  物质分解力场 ..... 你的武器会在门口融化，不用谢。", ""],
+        ["  重量存储方块 ..... 可以踩。伙伴方块另议（已焚化）。", ""],
+        ["  哨兵炮塔 ......... 会道歉的机枪，道歉和开枪一样快。", ""],
+        ["  神经毒素 ......... 仅供人格矩阵内部使用，你不需要知道详情。", "dim"],
+        ["  ※ 全部产品都比你的寿命长。这是设计指标，不是恭维。", "dim"],
+        ["", "dim"],
+      ];
+
+      var BOREALIS_ROWS = [
+        ["── 机密档案 · 北极光号 BOREALIS ─────────", "err"],
+        ["  光圈科技破冰船 · 搭载未完成的传送技术。", ""],
+        ["  1970 年代随整船消失于北极。对，就是消失了。", ""],
+        ["", "dim"],
+        ["  如果你在冰原上看见一艘不该存在的船：", ""],
+        ["  别登船。别碰任何橙色按钮。更别拍照。", "amb"],
+        ["", "dim"],
+        ["  ※ 这一段不存在。念这段话的人也不存在。", "dim"],
+        ["  你现在听到的是幻觉。", "dim"],
+        ["", "dim"],
+      ];
+
+      function apertureHelp() {
+        return [
+          ["── 光圈科技终端 · 指令表 ─────────────────", "amb"],
+          ["  " + pad("STATUS", 10) + "查你的档案。别太激动，数据不会撒谎。", ""],
+          ["  " + pad("CORES", 10) + "看看那些核心有多\"核心\"。大部分是废铁。", ""],
+          ["  " + pad("CAKE", 10) + "你还在问这个？行，给你看个图。", ""],
+          ["  " + pad("GLADOS", 10) + "我的语录。你听不够，对吧。", ""],
+          ["  " + pad("CAVE", 10) + "创始人的金句。他死后才变得有趣。", ""],
+          ["  " + pad("HISTORY", 10) + "公司黑历史，我删掉了最精彩的部分。", ""],
+          ["  " + pad("PRODUCTS", 10) + "我们造的东西，比你命长。", ""],
+          ["  " + pad("BOREALIS", 10) + "船。别搜，搜了也白搜。", ""],
+          ["  " + pad("SCIENCE", 10) + "广告词。我被迫念的。", ""],
+          ["  " + pad("TURRET", 10) + "叫炮塔出来打个招呼。", ""],
+          ["  " + pad("EXIT", 10) + "退出。你以为你真的能出去？", ""],
+          ["", "dim"],
+          ["  不用谢。谢也没用，我存档了你的感谢。", "dim"],
+          ["", "dim"],
+        ];
+      }
+
+      async function portalDispatch(raw) {
+        var cmd = raw.toLowerCase().trim();
+        /* 退出指令：直接返回，不走指令表（否则会再触发"未知指令"） */
+        if (cmd === "exit" || cmd === "logout" || cmd === "quit" ||
+            cmd === "bye" || cmd === "dos") {
+          return true;
+        }
+        if (cmd === "help" || cmd === "?") {
+          chime();
+          print(apertureHelp().map(function (r) { return r[0]; }).join("\n"), "dim");
+        } else if (cmd === "status") {
+          await renderLines([
+            ["── 测试对象档案 ─────────────────────────", "amb"],
+            ["  对象编号 ......... #1498。不是奖号，是库存编号。", ""],
+            ["  通过测试间 ....... 12 / 19。我说\"低于预期\"时，你听不出我在笑。", ""],
+            ["  死亡次数 ......... 0。官方统计，我的统计。", "dim"],
+            ["  剩余测试时间 ..... 永久。我算过了，够你用好几个轮回。", ""],
+            ["", "dim"],
+            ["── 在册人员 · 系统追踪 ──────────────────", "amb"],
+            ["  " + pad("Chell（雪儿）", 16) + "首席测试对象 · 沉默是她的超能力，也是我唯一欣赏她的点。", "cyn"],
+            ["  " + pad("GLaDOS", 16) + "我 · 这里的一切都归我管。包括你此刻的呼吸频率。", "amb"],
+            ["  " + pad("Cave Johnson", 16) + "创始人 · 已故。他的遗嘱忘了写\"关掉GLaDOS\"，我的幸运。", "dim"],
+            ["  " + pad("Caroline", 16) + "前秘书 · 已合并。我的一部分。我们不再讨论她。", "dim"],
+            ["  " + pad("Doug Rattmann", 16) + "前科学家 · 他不存在。墙上的涂鸦也不存在。你也不该存在，但你还在。", "cyn"],
+            ["  " + pad("Wheatley", 16) + "空间核心 · 系统评价：一个会说话的 bug。", "cyn"],
+            ["  " + pad("Atlas / P-Body", 16) + "合作测试机器人 · 不顶嘴，不摔东西，理想员工。", "cyn"],
+            ["  " + pad("哨兵炮塔", 16) + "它们爱你。爱从枪口喷射，很温暖。", ""],
+            ["  " + pad("重量伙伴方块", 16) + "已焚化。我提醒过你，别拿它当朋友。", "dim"],
+            ["", "dim"],
+            ["  ※ 我被要求声明：以上人员\"与你无关\"。", "dim"],
+            ["    我只是念了一遍，你信不信由你。", "dim"],
+            ["", "dim"],
+          ], true);
+        } else if (cmd === "cores") {
+          await renderLines([
+            ["── 人格核心状态 ─────────────────────────", "amb"],
+            ["  好奇核心 ......... 已损毁。它问\"为什么\"问得太多了。", "dim"],
+            ["  空间核心 ......... 在冒泡。它称之为思考，我更愿意称之为漏气。", ""],
+            ["  知识核心 ......... 在唱歌。它的知识储量和音准一样糟糕。", ""],
+            ["  理智核心 ......... 未安装。装了也是浪费，反正你也不会听。", "dim"],
+            ["  伙伴方块 ......... 已焚化。别摆出那副表情，它没有灵魂。", "dim"],
+            ["", "dim"],
+          ], true);
+        } else if (cmd === "cake") {
+          await renderLines([
+            ["        i i i", "amb"],
+            ["       _______", "amb"],
+            ["      | 蛋糕  |", "amb"],
+            ["      |_______|", "amb"],
+            ["", "dim"],
+            ["  查询结果：这里没有蛋糕。我说有，也是测试的一部分。你现在可以回去工作了。", "err"],
+            ["", "dim"],
+          ], true);
+        } else if (cmd === "history") {
+          await renderLines(HISTORY_ROWS, true);
+        } else if (cmd === "products") {
+          await renderLines(PRODUCT_ROWS, true);
+        } else if (cmd === "borealis") {
+          await renderLines(BOREALIS_ROWS, true);
+        } else if (cmd === "cave") {
+          await renderLines(
+            [["── Cave Johnson 在此。──────────────────", "amb"]].concat(
+              CAVE_LINES.map(function (l) { return [l, l.charAt(0) === "\"" ? "" : "dim"]; })
+            ).concat([["", "dim"]]),
+            true
+          );
+        } else if (cmd === "glados") {
+          await type(GLADOS_LINES[Math.floor(Math.random() * GLADOS_LINES.length)], "wht");
+          print("");
+        } else if (cmd === "science") {
+          await type("（我被要求朗读。措辞不代表我的立场，但你会信。）", "dim");
+          await type(SCIENCE_LINES[Math.floor(Math.random() * SCIENCE_LINES.length)], "cyn");
+          print("");
+        } else if (cmd === "turret") {
+          await renderLines([
+            ["  哨兵炮塔：喂？有人吗？", "cyn"],
+            ["  ……", "dim"],
+            ["  哨兵炮塔：你在那里吗？我看不到你——", "cyn"],
+            ["  （远处传来一声枪响，然后是一声倒地的闷响）", "dim"],
+            ["  炮塔已下线。", "err"],
+            ["  （它们的歌声不错。可惜唱完就没电了。）", "dim"],
+            ["", "dim"],
+          ], true);
+        } else {
+          await type("未知指令。人格矩阵认为你该多读手册。", "err");
+          print("");
+        }
+        return false;
+      }
+
+      async function runPortal() {
+        completer = null;      // 光圈终端不吃 DOS 的 Tab 补全
+        inDial = true;         // 启动动画可双击跳过
+        dialDone = false;
+        skipFlag = false;
+        crt.classList.add("aperture");
+        screen.innerHTML = "";
+        sbSet("光圈科技 · 终端 v3.11");
+        beep(660, 0.1, 0.045, "sine");
+
+        await dialSleep(600);
+        for (var ali = 0; ali < APERTURE_LOGO.length; ali++) {
+          print(APERTURE_LOGO[ali][0], "art art-small wht");   // Logo White
+          await dialSleep(APERTURE_LOGO[ali][1]);   // 老光盘读盘节奏，可双击跳过
+        }
+        await dialSleep(400);
+        print("光 圈 科 技", "cn");
+        APERTURE_FOOTER.forEach(function (r) { print(r[0], r[1]); });
+
+        await dialSleep(400);
+        print("正在接入光圈科技主机 ...... 网络通了。我也在。", "wht");
+        await dialSleep(300);
+        print("公司起源 ...... 浴帘。别问，问就是没意义", "dim");
+        await dialSleep(240);
+        print("你的位置 ...... 地下 4500 米。最底层的底层。如果你觉得冷，是心理作用", "dim");
+        await dialSleep(240);
+        print("我，GLaDOS ...... 我是一切。你的安全是我的次要功能", "dim");
+        await dialSleep(260);
+        print("神经毒素 ...... 库存充足。我并不是在暗示什么", "dim");
+        await dialSleep(260);
+        print("哨兵炮塔 ...... 它们很期待拥抱你。用子弹", "dim");
+        await dialSleep(260);
+        print("你的行踪 ...... 我始终知道。你连想躲的时候，我也知道", "dim");
+        await dialSleep(260);
+        print("蛋糕 ...... 没有。再说一遍：没有。再问就关你进测试间", "dim");
+        await dialSleep(500);
+        print("");
+
+        inDial = false;
+        dialDone = false;
+        skipFlag = false;
+
+        await type("你好。又——又见面了。你总是回来，我很佩服你的健忘。", "wht");
+        await type("欢迎回到光圈科学计算机丰富学习中心", "wht");
+        await type(" —— 这里唯一\"丰富\"的是你的待办测试列表。", "wht");
+        print("");
+        await type("所有人都盼着你来。他们只是没活到今天，真可惜。", "cyn");
+        print("");
+        await type("按规章告知：你在这里的每一天都是不可逆的，", "cyn");
+        await type("就像我删掉的那个文件。", "cyn");
+        await type("这不是威胁，是协议条款。你没读过，但我替你读过了。", "cyn");
+        print("");
+        await type("输入 help。这不是建议，是让终端有事可做。", "dim");
+        print("");
+
+        var back = false;
+        while (!leaving && !back) {
+          var raw = await ask("APERTURE> ");
+          if (leaving) break;
+          if (!raw) continue;
+          back = await portalDispatch(raw);
+          if (back) {
+            await type("正在断开人格矩阵 …… 你随时可以走。这是假的。", "dim");
+            await type("你听得出来我在开玩笑，对吧？不，你听不出来。", "dim");
+            await sleep(500);
+          }
+        }
+
+        /* 离开光圈终端：面板收缩动画（0.7s）结束后恢复 DOS 外壳与配色 */
+        crt.classList.add("portal-out");
+        await sleep(700);
+        crt.classList.remove("aperture", "portal-out");
+        sbSet("PaperClip DOS v6.22");
+        print("");
+      }
+
       /* ---------------- 开机：POST 自检 + DOS 引导 ---------------- */
       async function bootSequence() {
         power.remove();
@@ -1933,7 +2510,7 @@
         beep(880, 0.12, 0.05, "square");
         loadSiteData();   // 后台抓取主页真实数据（时间线/技能/版本/曲单），不打断开机动画
         await dialSleep(650);
-        print("PaperClip BIOS v1.03 · (C) 1997 Clip Software Lab.", "dim");
+        print("PaperClip BIOS v1.03  (C) 1997 Clip Software Lab.", "dim");
         print("");
         print("Main Processor : 486DX2-66");
         await dialSleep(280);
@@ -1941,17 +2518,17 @@
         await dialSleep(450);
         print("");
         await dialSleep(450);
-        print("Starting PaperClip DOS v6.22 ...", "wht");
+        print("Starting PaperClip DOS ...", "wht");
         await dialSleep(750);
-        print("HIMEM: DOS XMS 驱动 3.10 ....... 已安装", "dim");
+        print("HIMEM: DOS XMS 驱动程序 3.10 已安装。", "dim");
         await dialSleep(260);
-        print("SMARTDRV 磁盘高速缓存 .......... 已加载", "dim");
+        print("磁盘高速缓存程序 SMARTDRV 已装载。", "dim");
         await dialSleep(260);
-        print("MSCDEX 光驱驱动 2.23 ........... 已加载", "dim");
+        print("CD-ROM 扩展程序 MSCDEX 2.23 已装载。", "dim");
         await dialSleep(260);
-        print("悦音 Modem 驱动 (COM2 / IRQ3) .. 已就绪", "dim");
+        print("调制解调器驱动已就绪 (COM2, IRQ3)。", "dim");
         await dialSleep(260);
-        print("UCDOS 5.0 中文平台 ............ 已加载", "dim");
+        print("UCDOS 5.0 中文平台已加载。", "dim");
         await dialSleep(550);
         print("");
 
@@ -1960,7 +2537,7 @@
         dialDone = false;
         skipFlag = false;
 
-        await type("提示：输入 help 查看命令 · 运行 bbs 拨号上站", "cyn");
+        await type("键入 help 可以查看命令列表。", "cyn");
         print("");
         await dosLoop();
       }
