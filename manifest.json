@@ -1,0 +1,25 @@
+{
+  "name": "PaperClip 个人主页",
+  "short_name": "PaperClip",
+  "description": "一名在校学生的个人主页：折腾网页、玩 Minecraft、听终末地的歌。",
+  "start_url": "index.html",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#0d1017",
+  "theme_color": "#0d1017",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "00.jpg",
+      "sizes": "254x254",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "00.jpg",
+      "sizes": "254x254",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>PaperClip | 404</title>
+  <link rel="icon" type="image/jpeg" href="00.jpg" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1017" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4ef" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- 主题预载：与其它页面一致，浅色模式用户不闪深色 -->
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var theme = (saved === "light" || saved === "dark")
+        ? saved
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      if (theme === "light") document.documentElement.classList.add("light");
+    })();
+  </script>
+  <style>
+    /* 404 专属：整屏居中，不依赖其它页面结构 */
+    .nf-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .nf-code {
+      font-size: clamp(72px, 18vw, 160px);
+      font-weight: 800;
+      line-height: 1;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .nf-text { color: var(--text-secondary); margin: 12px 0 28px; }
+    .nf-btn {
+      display: inline-block;
+      padding: 12px 32px;
+      border-radius: 999px;
+      background: var(--accent-gradient);
+      color: #fff;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 4px 18px rgba(108, 140, 255, 0.35);
+      transition: var(--transition);
+    }
+    .nf-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  </style>
+</head>
+<body>
+  <main class="nf-wrap">
+    <div>
+      <div class="nf-code">404</div>
+      <h1>页面未找到</h1>
+      <p class="nf-text">您访问的页面不存在或已被移除。</p>
+      <a class="nf-btn" href="index.html">返回主页</a>
+    </div>
+  </main>
+</body>
+</html>
