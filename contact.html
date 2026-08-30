@@ -4,8 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PaperClip | 联系我</title>
+  <meta name="description" content="联系 PaperClip：邮箱 / GitHub / BiliBili，以及留言板" />
+  <!-- Open Graph 分享卡片 -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="PaperClip" />
+  <meta property="og:title" content="PaperClip | 联系我" />
+  <meta property="og:description" content="联系 PaperClip：邮箱 / GitHub / BiliBili，也可以在留言板说点什么。" />
+  <meta property="og:url" content="https://about.hell0.dpdns.org/contact.html" />
+  <meta property="og:image" content="https://about.hell0.dpdns.org/00.jpg" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://about.hell0.dpdns.org/contact.html" />
   <!-- 网站图标：浏览器标签页显示 -->
   <link rel="icon" type="image/jpeg" href="00.jpg" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1017" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4ef" />
   <!-- 主题与过渡预载脚本：全部在首帧渲染前执行，避免闪色/闪烁 -->
   <script>
     (function () {
@@ -40,7 +53,7 @@
   <link rel="stylesheet" href="libs/aos.css" />
   <link rel="stylesheet" href="style.css" />
   <!-- Cloudflare Web Analytics -->
-  <script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "a7891447e3ca46b3b3687011d3382114"}'></script>
+  <script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "87773c85bb1343d493895be5a89c1f40"}'></script>
   <!-- End Cloudflare Web Analytics -->
 </head>
 <body>
@@ -110,6 +123,51 @@
         </aside>
       </div>
     </section>
+
+    <!-- ---------- 留言板（giscus，基于 GitHub Discussions，免费无广告） ----------
+      启用步骤（一次性，约 3 分钟）：
+      1. GitHub 仓库 TUSI-ISUT/about-me → Settings → General → Features 勾选 Discussions
+      2. 安装 giscus App：https://github.com/apps/giscus （仅授权该仓库）
+      3. 打开 https://giscus.app/zh-CN ，输入仓库名 TUSI-ISUT/about-me，
+         Discussion 分类选 "Announcements"（只有你能开贴，访客只能回帖，防灌水）
+      4. 把页面生成的 data-repo-id 和 data-category-id 两个值
+         填到下方脚本里的 REPO_ID 和 CATEGORY_ID，推送后留言板自动出现
+    -->
+    <section class="container" id="comments" data-aos="fade-up">
+      <h2 class="section-title">留言板</h2>
+      <div class="giscus-box" id="giscus-mount"></div>
+    </section>
+    <script>
+      (function () {
+        var REPO_ID = "R_kgDOUHFkDA";
+        var CATEGORY_ID = "DIC_kwDOUHFkDM4DEe8H";
+        if (REPO_ID === "REPLACEME") {
+          // 未配置：显示占位提示，避免留言板区域空着
+          document.getElementById("giscus-mount").innerHTML =
+            '<p class="giscus-pending">留言板准备中，敬请期待 ✍️</p>';
+          return;
+        }
+
+        var s = document.createElement("script");
+        s.src = "https://giscus.app/client.js";
+        s.setAttribute("data-repo", "TUSI-ISUT/about-me");
+        s.setAttribute("data-repo-id", "R_kgDOUHFkDA");
+        s.setAttribute("data-category", "Announcements");
+        s.setAttribute("data-category-id", "DIC_kwDOUHFkDM4DEe8H");
+        s.setAttribute("data-mapping", "specific");
+        s.setAttribute("data-term", "站点留言板");
+        s.setAttribute("data-strict", "0");
+        s.setAttribute("data-reactions-enabled", "1");
+        s.setAttribute("data-emit-metadata", "0");
+        s.setAttribute("data-input-position", "top");
+        s.setAttribute("data-theme", document.documentElement.classList.contains("light") ? "light" : "dark");
+        s.setAttribute("data-lang", "zh-CN");
+        s.setAttribute("data-loading", "lazy");
+        s.crossOrigin = "anonymous";
+        s.async = true;
+        document.getElementById("giscus-mount").appendChild(s);
+      })();
+    </script>
   </main>
 
   <!-- ==================== 底部页脚（全部页面共用结构） ==================== -->
@@ -146,8 +204,6 @@
 
   <!-- 动画与页面切换库（本地文件，加载失败时 main.js 各模块自动降级） -->
   <script src="libs/swup.min.js"></script>
-  <script src="libs/gsap.min.js"></script>
-  <script src="libs/ScrollTrigger.min.js"></script>
   <script src="libs/lenis.min.js"></script>
   <script src="libs/aos.js"></script>
   <script src="main.js"></script>

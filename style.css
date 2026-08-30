@@ -1091,28 +1091,29 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   right: 20px;
   bottom: 20px;
   z-index: 900;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(210px, calc(100vw - 88px)); /* 手机端不压住左侧内容 */
+  padding: 7px 13px 7px 7px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-card);
   box-shadow: var(--shadow);
   cursor: pointer;
-  display: grid;
-  place-items: center;
-  padding: 0;
   transition: var(--transition);
 }
 
 .music-toggle:hover {
   box-shadow: var(--shadow-hover);
-  transform: scale(1.06);
+  transform: scale(1.03);
 }
 
 /* 唱片盘面：中心渐变主轴 + 同心纹理，播放时旋转 */
 .music-toggle .disc {
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background:
     radial-gradient(circle at center, var(--accent) 0 30%, transparent 32%),
@@ -1125,35 +1126,57 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   animation-play-state: running;  /* 播放时旋转 */
 }
 
+/* 曲名：单行截断 */
+.music-toggle .m-title {
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 播放状态图标：▶/‖ 两枚图标叠放，播放状态切换时交叉淡入旋转 */
+.music-toggle .m-state {
+  position: relative;
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.music-toggle .m-state img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+/* 暂停态：▶ 显示，‖ 缩小旋转藏起 */
+.music-toggle .ic-pause {
+  opacity: 0;
+  transform: scale(0.4) rotate(-120deg);
+}
+
+/* 播放态：▶ 缩小旋转退场，‖ 转正入场 */
+.music-toggle.playing .ic-play {
+  opacity: 0;
+  transform: scale(0.4) rotate(120deg);
+}
+
+.music-toggle.playing .ic-pause {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
 @keyframes disc-spin {
   to { transform: rotate(360deg); }
 }
 
-/* 唱片中心的播放/暂停图标：▶ 待播放 / ‖ 播放中（覆盖在盘面上，不随旋转） */
-.music-toggle::before {
-  content: "▶";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  line-height: 1;
-  color: #fff;
-  text-indent: 2px; /* 三角形视觉居中修正 */
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-}
-
-.music-toggle.playing::before {
-  content: "‖";
-  text-indent: 0;
-  letter-spacing: -1px;
-}
-
-/* 用户偏好减少动态效果时唱片不旋转 */
+/* 用户偏好减少动态效果时唱片不旋转、图标不旋转过渡 */
 @media (prefers-reduced-motion: reduce) {
   .music-toggle .disc { animation: none; }
+  .music-toggle .m-state img { transition: none; }
 }
 
 /* ---------- 11.1 曲单按钮（唱片按钮上方） ---------- */
@@ -1326,3 +1349,28 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
     transition: none !important;
   }
 }
+
+/* ============================================================
+   13. 留言板
+   ============================================================ */
+
+/* 13.2 留言板容器（contact 页）：卡片化，giscus iframe 自适应 */
+.giscus-box {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
+}
+
+.giscus-box iframe { width: 100% !important; }
+
+.giscus-pending {
+  margin: 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  padding: 12px 0;
+}
+

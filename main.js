@@ -49,8 +49,9 @@ function initNavbar() {
   /* 1.2 汉堡菜单：点击切换展开/收起（≤768px 生效） */
   if (toggle && links) {
     toggle.addEventListener("click", () => {
-      toggle.classList.toggle("open");
-      links.classList.toggle("open");
+      const open = links.classList.toggle("open");
+      toggle.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", String(open)); // 无障碍：告知菜单展开状态
     });
 
     // 点击任意导航链接后自动收起菜单（手机端体验）
@@ -58,6 +59,7 @@ function initNavbar() {
       a.addEventListener("click", () => {
         toggle.classList.remove("open");
         links.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
       })
     );
   }
@@ -101,6 +103,17 @@ function applyTheme(theme) {
   applyTheme._timer = setTimeout(() => root.classList.remove("theme-anim"), 450);
 
   root.classList.toggle("light", theme === "light");
+
+  // giscus 留言板已在页面上时，同步切换它的主题
+  const giscusFrame = document.querySelector("iframe.giscus-frame");
+  if (giscusFrame && giscusFrame.contentWindow) {
+    try {
+      giscusFrame.contentWindow.postMessage(
+        { giscus: { setConfig: { theme: theme === "light" ? "light" : "dark" } } },
+        "https://giscus.app"
+      );
+    } catch (e) {}
+  }
 
   if (btn) {
     // 深色模式显示"太阳"（点击切到浅色）；浅色模式显示"月亮"
@@ -314,6 +327,7 @@ function initSwup() {
     if (toggle && links) {
       toggle.classList.remove("open");
       links.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
     }
 
     // 重放容器内的 <script>（如 minecraft.html 的服务器状态查询）：
@@ -515,12 +529,21 @@ function initMusicPlayer() {
     fadeRaf = requestAnimationFrame(step);
   }
 
-  /* 创建悬浮唱片按钮（挂在 body 上，Swup 换页不影响） */
+  /* 创建悬浮胶囊播放器（挂在 body 上，Swup 换页不影响）：
+     [小唱片] 曲名 [▶/‖] —— 点击整条切换播放/暂停 */
   const btn = document.createElement("button");
   btn.className = "music-toggle";
   btn.type = "button";
-  btn.innerHTML = '<span class="disc" aria-hidden="true"></span>';
+  btn.innerHTML =
+    '<span class="disc" aria-hidden="true"></span>' +
+    '<span class="m-title"></span>' +
+    '<span class="m-state" aria-hidden="true">' +
+      '<img class="ic-play" src="icon-play.png" alt="" />' +
+      '<img class="ic-pause" src="icon-pause.webp" alt="" />' +
+    '</span>';
   document.body.appendChild(btn);
+  const mTitle = btn.querySelector(".m-title");
+  btn.setAttribute("aria-live", "polite"); // 换歌时屏幕阅读器播报新曲名
 
   function currentTrack() {
     const s = state[currentKey];
@@ -545,7 +568,8 @@ function initMusicPlayer() {
   function updateBtn() {
     const playing = !audio.paused;
     btn.classList.toggle("playing", playing);
-    const tip = (playing ? "暂停音乐：" : "播放音乐：") + (manualTrack || currentTrack());
+    mTitle.textContent = manualTrack || currentTrack();
+    const tip = (playing ? "暂停音乐：" : "播放音乐：") + mTitle.textContent;
     btn.title = tip;
     btn.setAttribute("aria-label", tip);
     if (!panel.hidden) refreshPanel(); // 面板开着时同步高亮与固定标记
@@ -565,7 +589,8 @@ function initMusicPlayer() {
     } catch (e) {}
   }
 
-  /* 恢复某曲单的上次曲目到 state.index，返回需 seek 的时间（无记录返回 0） */
+  /* 恢复某曲单的上次曲目到 state.index，并把需 seek 的时间写入
+     pendingSeek（无记录返回 0），由换源后的 applyPendingSeek() 统一应用 */
   function restoreIndex(key) {
     let s;
     try { s = JSON.parse(localStorage.getItem(STATE_KEY) || "{}")[key]; } catch (e) {}
@@ -574,7 +599,9 @@ function initMusicPlayer() {
     const i = st.order.indexOf(s.track);
     if (i === -1) return 0;
     st.index = i;
-    return s.time > 5 ? s.time : 0; // 快开头就从头播
+    const t = s.time > 5 ? s.time : 0; // 快开头就从头播
+    pendingSeek = t;
+    return t;
   }
 
   /* 节流保存：timeupdate 高频触发，每 5 秒落一次盘；暂停/切后台/关页前立即保存 */
@@ -600,20 +627,7 @@ function initMusicPlayer() {
     if (audio.getAttribute("src") !== expectedSrc()) {
       audio.src = expectedSrc();
       updateMediaSession();
-      // 恢复上次播放到的时间点（元数据就绪后再 seek）
-      if (pendingSeek > 0) {
-        const seekTo = pendingSeek;
-        pendingSeek = 0;
-        if (audio.readyState >= 1) {
-          audio.currentTime = seekTo;
-        } else {
-          audio.addEventListener(
-            "loadedmetadata",
-            () => (audio.currentTime = seekTo),
-            { once: true }
-          );
-        }
-      }
+      applyPendingSeek(); // 恢复上次播放到的时间点（元数据就绪后再 seek）
     }
     audio
       .play()
@@ -630,14 +644,20 @@ function initMusicPlayer() {
   }
 
   function pause() {
-    // 淡出到接近 0 后再真正暂停，松手时不会"啪"一声截断
+    // 界面立即响应：图标/唱片马上切换，声音在后台 400ms 淡出，
+    // 操作零延迟感（淡出完成后 audio.pause() 会触发事件同步状态）
     if (audio.paused) return;
+    btn.classList.remove("playing");
     fadeVolume(0, 400, () => {
       audio.pause();
       audio.volume = VOLUME; // 复位音量，下次起播直接是固定音量
     });
-    updateBtn();
   }
+
+  /* 图标/唱片跟随 audio 真实状态：淡入淡出会延迟真正的 play/pause，
+     不能只靠 play()/pause() 里的手动 updateBtn()（暂停时序对不上） */
+  audio.addEventListener("play", updateBtn);
+  audio.addEventListener("pause", updateBtn);
 
   /* 播放失败自动跳下一首：文件缺失/解码失败时不至于静默卡住。
      连续失败达到曲单长度时停止尝试（曲单可能整体不可用）。 */
@@ -818,11 +838,35 @@ function initMusicPlayer() {
     closePanel();
   });
 
+  /* Esc 关闭曲单面板（无障碍：键盘用户不用找别的出口） */
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !panel.hidden) closePanel();
+  });
+
   /* 打开页面即自动随机播放：
      - 浏览器允许时（有媒体互动记录）直接起播
      - 被自动播放策略拦截时，等待首次任意点击/触摸续播 */
+  /* 待恢复进度换源后统一在此应用（play() 与 tryAutoplay 共用） */
+  function applyPendingSeek() {
+    if (pendingSeek <= 0) return;
+    const seekTo = pendingSeek;
+    pendingSeek = 0;
+    if (audio.readyState >= 1) {
+      audio.currentTime = seekTo;
+    } else {
+      audio.addEventListener(
+        "loadedmetadata",
+        () => (audio.currentTime = seekTo),
+        { once: true }
+      );
+    }
+  }
+
   function tryAutoplay() {
-    restoreIndex(currentKey); // 恢复上次听到的曲目与进度
+    restoreIndex(currentKey);      // 恢复上次听到的曲目与进度
+    audio.src = expectedSrc();     // 必须先设音源再 play（这里不走 play() 包装）
+    updateMediaSession();
+    applyPendingSeek();
     audio
       .play()
       .then(() => {

@@ -11,3 +11,11 @@
 # 图片头像等静态资源（_headers 不支持路径中间的通配符，按文件列出）
 /00.jpg
   Cache-Control: public, max-age=604800
+/github.webp
+  Cache-Control: public, max-age=604800
+/bilibili.webp
+  Cache-Control: public, max-age=604800
+/icon-play.png
+  Cache-Control: public, max-age=604800
+/icon-pause.webp
+  Cache-Control: public, max-age=604800
