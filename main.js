@@ -18,7 +18,7 @@
    ============================================================ */
 
 /* 站点版本号：发版时只改这里，页脚自动同步显示 */
-const SITE_VERSION = "v0.2.5";
+const SITE_VERSION = "v0.7.0";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
@@ -35,6 +35,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initHeroFx();          // GSAP 首屏动画
   initMusicPlayer();     // 背景音乐播放器
   initGiscusShield();    // 留言板滚轮屏蔽层（依赖 Lenis，需在其后执行）
+  initBackToTop();       // 回到顶部按钮
+  initRunDays();         // 页脚运行天数
+  initPWA();             // Service Worker 注册（PWA 离线支持）
 });
 
 /* ------------------------------------------------------------
@@ -206,6 +209,67 @@ function initGiscusShield() {
   shield.addEventListener("click", () => shield.classList.add("off"));
   // 鼠标移出留言板区域 → 恢复屏蔽，滚轮重新由页面平滑接管
   box.addEventListener("mouseleave", () => shield.classList.remove("off"));
+}
+
+/* ------------------------------------------------------------
+ * 11. PWA Service Worker 注册
+ *    注册成功后支持离线访问与"添加到桌面"
+ * ---------------------------------------------------------- */
+function initPWA() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("sw.js", { scope: "./" })
+      .then((reg) => console.log("[PWA] Service Worker 已注册", reg.scope))
+      .catch((err) => console.warn("[PWA] Service Worker 注册失败", err));
+  });
+}
+
+/* ------------------------------------------------------------
+ * 12. 回到顶部按钮：滚动超过一屏后显示，点击平滑返回顶部
+ * ---------------------------------------------------------- */
+function initBackToTop() {
+  /* 幂等：Swup 换页重放时不重复创建 */
+  if (document.getElementById("back-to-top")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "back-to-top";
+  btn.type = "button";
+  btn.setAttribute("aria-label", "回到顶部");
+  btn.innerHTML = "↑";
+  document.body.appendChild(btn);
+
+  let ticking = false;
+  const onScroll = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      btn.classList.toggle("show", window.scrollY > window.innerHeight * 0.8);
+      ticking = false;
+    });
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  btn.addEventListener("click", () => {
+    if (window.lenisInstance) {
+      window.lenisInstance.scrollTo(0, { duration: 1.2 });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
+}
+
+/* ------------------------------------------------------------
+ * 13. 页脚运行天数：从站点创建日起计算，显示在 .run-days 元素中
+ * ---------------------------------------------------------- */
+function initRunDays() {
+  const el = document.querySelector(".run-days");
+  if (!el) return;
+  // 站点创建日期（可按需修改）
+  const start = new Date("2026-08-31T00:00:00");
+  const now = new Date();
+  const days = Math.floor((now - start) / 86400000);
+  el.textContent = days > 0 ? days : 0;
 }
 
 /* ------------------------------------------------------------
@@ -520,8 +584,7 @@ function initHeroFx() {
  *      其余页面（首页/联系我）播 music/zmd/（终末地音乐）
  *    - ♫ 曲单面板：全列出手动点选，选中后固定循环不再随机
  *    - Swup 换页自动切单：播放中无缝续播，暂停中仅更新待播曲目
- *    - 打开页面自动随机播放；被浏览器自动播放策略拦截时
- *      首次任意点击自动续播
+ *    - 打开页面不自动播放，等待用户手动点击播放按钮
  * ---------------------------------------------------------- */
 function initMusicPlayer() {
   /* 曲单定义：key → { dir: 音乐子目录, tracks: 曲目数组 }
@@ -952,10 +1015,7 @@ function initMusicPlayer() {
     if (e.key === "Escape" && !panel.hidden) closePanel();
   });
 
-  /* 打开页面即自动随机播放：
-     - 浏览器允许时（有媒体互动记录）直接起播
-     - 被自动播放策略拦截时，等待首次任意点击/触摸续播 */
-  /* 待恢复进度换源后统一在此应用（play() 与 tryAutoplay 共用） */
+  /* 待恢复进度换源后统一在此应用（play() 共用） */
   function applyPendingSeek() {
     if (pendingSeek <= 0) return;
     const seekTo = pendingSeek;
@@ -971,26 +1031,10 @@ function initMusicPlayer() {
     }
   }
 
-  function tryAutoplay() {
-    restoreIndex(currentKey);      // 恢复上次听到的曲目与进度
-    audio.src = expectedSrc();     // 必须先设音源再 play（这里不走 play() 包装）
-    updateMediaSession();
-    applyPendingSeek();
-    audio
-      .play()
-      .then(() => {
-        fadeVolume(VOLUME, 600);
-        updateBtn();
-      })
-      .catch(() => {
-        const resume = () => {
-          document.removeEventListener("pointerdown", resume);
-          if (audio.paused) play();
-        };
-        document.addEventListener("pointerdown", resume);
-      });
-  }
-  tryAutoplay();
-
+  /* 页面加载时不自动播放，等待用户点击播放按钮 */
+  restoreIndex(currentKey);
+  audio.src = expectedSrc();
+  updateMediaSession();
+  applyPendingSeek();
   updateBtn(); // 初始按钮态
 }

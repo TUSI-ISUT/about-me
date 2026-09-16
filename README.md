@@ -9,15 +9,20 @@
 
 | 页面 | 说明 |
 |------|------|
-| `index.html` | 现代模式主页：我的轨迹、技能进度条、复古 BBS 入口 |
+| `index.html` | 现代模式主页：我的轨迹、技能进度条、项目展示、友情链接、复古 BBS 入口 |
+| `blog.html` | 博客：从 `posts/` 目录读取 Markdown 文件，支持标签筛选与搜索 |
 | `bbs.html` | **复古 DOS 终端**（本站最有意思的部分，见下） |
 | `minecraft.html` | Minecraft 服务器实时状态 + 交流群 |
 | `contact.html` | 联系方式 + giscus 留言板（附学业回复提示） |
 
 ## 复古 DOS 终端（bbs.html）
 
-开机自检 → UCDOS 中文平台 → `C:\>` 提示符，一台 1997 年的 486：
+Award BIOS 自检 → 逐行执行 CONFIG.SYS / AUTOEXEC.BAT → UCDOS 中文平台 → `C:\>` 提示符，
+一台 1997 年的 486：
 
+- **开机自检（POST）**：Award BIOS 头部、CPU + L1/L2 Cache 检测、内存计数动画（0→8192KB）、
+  CMOS 校验、IDE 硬盘/CD-ROM 检测、软驱/串口/并口、`Press DEL to enter SETUP` 一闪提示，
+  随后逐行执行 CONFIG.SYS（HIMEM / SMARTDRV / DOS=HIGH）与 AUTOEXEC.BAT（PATH / BLASTER / MOUSE）
 - **BBS.COM** —— 拨号上站（WebAudio 合成拨号音/握手声），呼号登录后可逛：
   站长档案 / 我的轨迹 / 技能档案 / 布告栏 / 留言板（与 giscus 同仓同步）/
   在线用户（随机） / 系统时间 / MC 服务器实时状态
@@ -25,16 +30,23 @@
   `status / cores / cake / glados / cave / history / products / borealis`，
   `play` 还会播放 `music/Never Gonna Give You Up.mid`（自带迷你 MIDI 解析器 + WebAudio 合成）
 - **SNAKE.EXE** —— 贪吃蛇（方向键/WASD，Q 退出）
-- **官方风味命令**：`dir / cd / type / tree / color / edit / mem / chkdsk /
-  scandisk（动画）/ defrag（动画）/ ping / ver / vol / echo / cls / exit`，
-  TAB 补全，配色可切换（绿磷 / 琥珀 / 蓝白）
+- **DOS 命令**：`dir`（支持 `/w` 宽列 / `/s` 递归 / `/a` 全部）、`cd`、`type`、`tree`、
+  `md` / `rd` / `del`、`ren`、`copy con`、`attrib`、`prompt`（支持 `$P$G` 等元字符）、
+  `path`、`set`、`color`、`edit`、`mem`、`chkdsk`、`scandisk`（动画）、`defrag`（动画）、
+  `ping`、`ver`、`vol`、`date`、`time`、`echo`、`cls`、`exit`，TAB 补全，
+  配色可切换（绿磷 / 琥珀 / 蓝白）
+- **CRT 拟真**：磷光余晖（新文字高亮渐隐）、屏幕球面曲率、开机过曝闪白、
+  扫描线 / 噪点 / 滚纹 / 暗角 / 玻璃反光
+- **音效**：WebAudio 合成开机蜂鸣、消磁颤音、软驱寻道声、硬盘读写声、Modem 拨号与握手噪声
 - 留言板草稿存 localStorage，公开留言走 GitHub 登录（contact 页 giscus）
 
 ## 技术栈
 
 - 纯静态 HTML / CSS / JavaScript，**无框架、无构建步骤**
 - 本地库（`libs/`）：Swup（无刷新换页）、GSAP + ScrollTrigger、Lenis（平滑滚动）、AOS（滚动入场）
-- 终端音效与音乐全部由 WebAudio 现场合成或本地文件，无 CDN 依赖
+- 博客使用 marked.js（CDN）渲染 Markdown，文章以 `.md` 文件存放在 `posts/` 目录
+- PWA 离线支持：Service Worker 预缓存核心页面与文章，可添加到桌面
+- 终端音效与音乐全部由 WebAudio 现场合成或本地文件
 - `main.js` 顶部 `SITE_VERSION` 为全站版本号单一来源（页脚 / BBS 自动同步）
 
 ## 本地运行
@@ -61,4 +73,4 @@ HTML / main.js / style.css 每次回源校验（杜绝新旧混用），
 
 ---
 
-当前版本 **v0.2.5** · © 2026 PaperClip · 保留所有权利
+当前版本 **v0.7.0** · © 2026 PaperClip · 保留所有权利

@@ -74,6 +74,7 @@
         <!-- 导航链接：当前页加 .active 高亮 -->
         <ul class="nav-links">
           <li><a class="nav-link" href="index.html">首页</a></li>
+          <li><a class="nav-link" href="blog.html">博客</a></li>
           <li><a class="nav-link active" href="minecraft.html">Minecraft</a></li>
           <li><a class="nav-link" href="contact.html">联系我</a></li>
         </ul>
@@ -92,6 +93,11 @@
   <!-- ==================== 主体内容（#swup 为 Swup 页面切换容器） ==================== -->
   <main id="swup" class="transition-fade">
     <section class="container">
+      <nav class="breadcrumb" aria-label="面包屑导航">
+        <a href="index.html">首页</a>
+        <span class="sep">/</span>
+        <span class="current">Minecraft</span>
+      </nav>
       <div class="page-head" data-aos="fade-up">
         <h1>Minecraft</h1>
         <p>服务器介绍</p>
@@ -151,7 +157,7 @@
             <li><a href="#" data-version="整合包">整合包文件</a></li>
           </ul>
         </div>
-        <a id="mc-copy-ip-btn" class="mc-join-btn" href="http://xm.rainplay.cn:38106" target="_blank" rel="noopener">服务器在线地图</a>
+        <a id="mc-copy-ip-btn" class="mc-join-btn" href="http://nbc.rainplay.cn:26225/" target="_blank" rel="noopener">服务器在线地图</a>
       </div>
     </section>
 
@@ -162,8 +168,8 @@
         "use strict";
 
         // —— 服务器地址（固定，如需修改改这里即可） ——
-        var SERVER = "xm.rainplay.cn";
-        var PORT   = "15991";
+        var SERVER = "nbc.rainplay.cn";
+        var PORT   = "11808";
 
         // —— 缓存配置 ——
         var CACHE_KEY = "mc_status_" + SERVER + "_" + PORT; // 缓存键：按服务器区分
@@ -421,6 +427,7 @@
           <h4>快速链接</h4>
           <ul class="footer-links">
             <li><a href="index.html">首页</a></li>
+            <li><a href="blog.html">博客</a></li>
             <li><a href="minecraft.html">Minecraft</a></li>
             <li><a href="contact.html">联系我</a></li>
           </ul>
@@ -439,7 +446,7 @@
       <!-- 版权行：年份由 main.js 自动更新 -->
       <div class="footer-bottom">
         <p>© <span id="footer-year">2026</span> PaperClip · 保留所有权利 · <a href="https://icp.gov.moe/?keyword=20262701" target="_blank" rel="noopener">萌ICP备20262701号</a> · <span class="site-version"></span></p>
-        <p>99% Vibe Coding</p>
+        <p>本站已运行 <b class="run-days">0</b> 天 · 99% Vibe Coding</p>
         <p>Designed &amp; Built by PaperClip</p>
       </div>
     </div>

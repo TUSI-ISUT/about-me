@@ -178,6 +178,22 @@
     }
 
     #screen p { white-space: pre-wrap; word-break: break-all; min-height: 1.5em; }
+
+    /* 磷光余晖：新打印的文字从高亮渐隐到正常亮度，模拟 CRT 荧光粉余辉 */
+    #screen p.afterglow {
+      animation: phosphor-decay 0.55s ease-out;
+    }
+    @keyframes phosphor-decay {
+      0%   { filter: brightness(1.8) saturate(1.3); }
+      40%  { filter: brightness(1.3) saturate(1.1); }
+      100% { filter: brightness(1) saturate(1); }
+    }
+
+    /* 屏幕曲率：轻微桶形畸变 + 中心放大，模拟 CRT 球面玻璃 */
+    #screen {
+      transform: perspective(1400px) scale(1.012);
+      transform-origin: center;
+    }
     #screen a { color: var(--amber); text-decoration: underline; }
 
     .dim  { color: var(--fg-dim); text-shadow: none; }
@@ -357,10 +373,22 @@
     }
 
     @keyframes beam-on {
-      0%   { opacity: 0; transform: scaleY(0.005); filter: brightness(6); }
-      35%  { opacity: 1; transform: scaleY(0.005); filter: brightness(6); }
-      55%  { transform: scaleY(1); filter: brightness(2.2); }
+      0%   { opacity: 0; transform: scaleY(0.005); filter: brightness(8); }
+      12%  { opacity: 1; transform: scaleY(0.005); filter: brightness(8); }
+      30%  { transform: scaleY(0.6); filter: brightness(5); }
+      45%  { transform: scaleY(1); filter: brightness(3.5); }
+      60%  { filter: brightness(1.8); }
       100% { transform: scaleY(1); filter: brightness(1); }
+    }
+
+    /* 开机过曝闪白：CRT 通电瞬间的亮度浪涌 */
+    #crt.booting::before {
+      animation: power-flash 0.8s ease-out;
+    }
+    @keyframes power-flash {
+      0%   { background: radial-gradient(ellipse at center, rgba(255,255,255,0.6), transparent 70%); }
+      30%  { background: radial-gradient(ellipse at center, rgba(255,255,255,0.15), transparent 60%); }
+      100% { background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%); }
     }
 
     /* ---------- DOS 蓝色状态栏 ---------- */
@@ -516,14 +544,14 @@
       <span><span class="key">F1</span>帮助</span>
       <span><span class="key">Esc</span>退出复古模式</span>
       <span class="fill"></span>
-      <span class="right" id="sb-right">PaperClip DOS v6.22</span>
+      <span class="right" id="sb-right">DOS v6.22</span>
     </div>
 
     <!-- 开机层：浏览器要求音频必须有用户手势才能播放 -->
     <div id="power" role="button" tabindex="0" aria-label="接通电源，开机">
       <div class="pwr-icon">⏻</div>
       <div class="pwr-txt">PUSH POWER · 接通电源</div>
-      <div class="pwr-sub">PaperClip 486DX2/66 · 请戴耳机体验拨号音</div>
+      <div class="pwr-sub">486DX2/66 · 请戴耳机体验拨号音</div>
     </div>
   </div>
 
@@ -710,13 +738,64 @@
       /* 消息提示音：菜单出现的短促 "叮" */
       function chime() { beep(880, 0.08, 0.04); beep(1320, 0.1, 0.035, "sine", ac ? ac.currentTime + 0.09 : 0); }
 
+      /* 软驱寻道声：短促的"哒哒"步进电机声（方波 + 快速频率跳变） */
+      function floppySeek() {
+        if (!ac || muted) return;
+        var t = ac.currentTime;
+        for (var i = 0; i < 4; i++) {
+          var o = ac.createOscillator();
+          var g = ac.createGain();
+          o.type = "square";
+          o.frequency.setValueAtTime(180 + Math.random() * 80, t + i * 0.05);
+          g.gain.setValueAtTime(0.025, t + i * 0.05);
+          g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.04);
+          o.connect(g); g.connect(master);
+          o.start(t + i * 0.05); o.stop(t + i * 0.05 + 0.05);
+        }
+      }
+
+      /* 硬盘读写声：低频"咔"声（短促噪声爆发 + 低频 thump） */
+      function hddSeek() {
+        if (!ac || muted) return;
+        var t = ac.currentTime;
+        /* 噪声爆发：模拟磁头移动的摩擦声 */
+        var bufSize = ac.sampleRate * 0.12;
+        var buf = ac.createBuffer(1, bufSize, ac.sampleRate);
+        var data = buf.getChannelData(0);
+        for (var i = 0; i < bufSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+        }
+        var src = ac.createBufferSource();
+        src.buffer = buf;
+        var ng = ac.createGain();
+        ng.gain.setValueAtTime(0.03, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        var nf = ac.createBiquadFilter();
+        nf.type = "lowpass";
+        nf.frequency.value = 1800;
+        src.connect(nf); nf.connect(ng); ng.connect(master);
+        src.start(t);
+        /* 低频 thump：磁头落定 */
+        var o = ac.createOscillator();
+        var og = ac.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(90, t + 0.08);
+        o.frequency.exponentialRampToValueAtTime(45, t + 0.16);
+        og.gain.setValueAtTime(0.04, t + 0.08);
+        og.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+        o.connect(og); og.connect(master);
+        o.start(t + 0.08); o.stop(t + 0.2);
+      }
+
       /* ---------------- 输出：打字机 ---------------- */
       function scrollBottom() { screen.scrollTop = screen.scrollHeight; }
 
-      /* print：整行立即出现（用于高速滚动的系统报文） */
+      /* print：整行立即出现（用于高速滚动的系统报文）
+         新行加上 afterglow 类，模拟荧光粉点亮时的余辉衰减 */
       function print(text, cls) {
         var p = document.createElement("p");
-        if (cls) p.className = cls;
+        if (cls) p.className = cls + " afterglow";
+        else p.className = "afterglow";
         p.textContent = text === undefined ? "" : text;
         screen.appendChild(p);
         scrollBottom();
@@ -744,11 +823,11 @@
           curJob = job;
           var step = function () {
             if (skipFlag || typing !== p) { job.finish(); return; }
-            /* 一次吐 1-2 字，速度带随机抖动，模拟串口吞吐不均 */
-            p.textContent = full.slice(0, i += (Math.random() < 0.3 ? 2 : 1));
+            /* 一次吐 2-4 字，模拟 VGA 显存块写入的吞吐（约 200-400 字/秒） */
+            p.textContent = full.slice(0, i += (Math.random() < 0.4 ? 4 : (Math.random() < 0.6 ? 3 : 2)));
             scrollBottom();
             if (i < full.length) {
-              setTimeout(step, (cps || 26) + Math.random() * 26);
+              setTimeout(step, (cps || 4) + Math.random() * 4);
             } else {
               typing = null; curJob = null;
               resolve();
@@ -806,11 +885,12 @@
               else kb.value = history[histPos];
               e.preventDefault();
             } else if (e.key === "Tab" && completer) {
-              /* Tab 补全：唯一候选直接补上；多个候选补公共前缀并列出 */
+              /* DOS 风格 Tab：唯一候选直接补全；多个候选先补公共前缀，
+                 若前缀已无法再延长则列出全部候选（相当于连按两次 Tab） */
               e.preventDefault();
               var cv = kb.value;
               var cands = completer(cv);
-              if (!cands.length) return;
+              if (!cands.length) { beep(200, 0.06, 0.04, "square"); return; }
               if (cands.length === 1) {
                 kb.value = cands[0];
               } else {
@@ -820,8 +900,13 @@
                     pre = pre.slice(0, -1);
                   }
                 }
-                if (pre && pre !== cv) kb.value = pre;
-                print(cands.join("   "), "dim");
+                if (pre && pre.length > cv.length) {
+                  /* 公共前缀比当前输入长 → 补到前缀（首次 Tab） */
+                  kb.value = pre;
+                } else {
+                  /* 前缀已无法延长 → 列出全部候选（再次 Tab） */
+                  print(cands.join("   "), "dim");
+                }
               }
               renderMirror();
             } else {
@@ -954,7 +1039,7 @@
         } else {
           rows.push(["  呼号   PaperClip（回形针）", ""]);
           rows.push(["  坐标   中国大陆 · 在校学生", ""]);
-          rows.push(["  爱好   折腾网页 / Minecraft / 终末地", ""]);
+          rows.push(["  爱好   网页开发 / Minecraft / 终末地", ""]);
           rows.push(["  信条   先动手做出来，再慢慢学好", ""]);
         }
         rows.push(["", "dim"]);
@@ -1018,10 +1103,10 @@
             ];
             if (motd) rows.push(["  ▸ MOTD  " + motd.replace(/\n+/g, " "), "dim"]);
           } else {
-            rows = [["  ▸ 状态   离线（服务器又炸了，改天再来）", "err"]];
+            rows = [["  ▸ 状态   离线", "err"]];
           }
         } catch (e) {
-          rows = [["  ▸ 查询失败，接口不可达（也许你的电话线松了）", "err"]];
+          rows = [["  ▸ 查询失败，接口不可达", "err"]];
         }
         rows.push(["", "dim"]);
         return rows;
@@ -1041,7 +1126,6 @@
         await renderLines([
           ["── 布告栏 · BULLETIN ────────────────────", "amb"],
           ["  ▸ 本站由 Cloudflare Pages 提供骨干网络", ""],
-          ["    （比 1997 年的 33.6k 快了大约一百万倍）", "dim"],
           ["  ▸ QQ 交流群：1046086485（现代模式 minecraft.html 可一键加群）", "dim"],
           ["", "dim"],
           ["── Minecraft 服务器 · 实时状态 ──────────", "amb"],
@@ -1137,7 +1221,7 @@
           var pubs = await fetchPublicMsgs();
           publicRows.push(["── 公开留言板 · 同步自 GitHub ───────────", "amb"]);
           if (!pubs.length) {
-            publicRows.push(["  还没有公开留言，来做第一个吧。", "dim"]);
+            publicRows.push(["  暂无公开留言。", "dim"]);
           }
           pubs.forEach(function (m) {
             var who = m.sysop ? "SysOp·" + m.by : m.by;
@@ -1147,7 +1231,7 @@
           publicRows.push(["  （仅显示最近 10 条 · 完整版在联系页留言板）", "dim"]);
           publicRows.push(["", "dim"]);
         } catch (e) {
-          publicRows.push(["── 公开留言板 · 电话线又断了（GitHub 连不上）", "err"]);
+          publicRows.push(["── 公开留言板 · 无法连接 GitHub", "err"]);
           publicRows.push(["", "dim"]);
         }
 
@@ -1162,7 +1246,7 @@
             publicRows.push(["  [" + stamp + "]  " + m.by + ":", "cyn"]);
             publicRows.push(["    " + m.text, ""]);
           });
-          publicRows.push(["  msg send 可以去联系页把想法发到公开留言板。", "dim"]);
+          publicRows.push(["  使用 msg send 前往联系页发布公开留言。", "dim"]);
           publicRows.push(["", "dim"]);
         }
         return publicRows;
@@ -1182,17 +1266,17 @@
           var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
         }
         var pick = pool.slice(0, 5 + Math.floor(Math.random() * 4));
-        var states = ["灌水中", "挂机中", "刷屏中", "看布告", "下棋中", "发呆中", "下载中", "潜水中"];
+        var states = ["浏览中", "空闲", "发帖中", "阅读布告", "游戏中", "离线", "下载中", "潜水"];
         var rows = [
           ["── 在线用户 · WHO ───────────────────────", "amb"],
           ["  " + pad("呼号", 14) + pad("节点", 8) + "状态", "dim"],
         ];
-        rows.push(["  " + pad("SysOp(PaperClip)", 14) + pad("#0", 8) + "管着站", "cyn"]);
+        rows.push(["  " + pad("SysOp(PaperClip)", 14) + pad("#0", 8) + "管理中", "cyn"]);
         pick.forEach(function (nm, i) {
           var st = states[Math.floor(Math.random() * states.length)];
           rows.push(["  " + pad(nm, 14) + pad("#" + (i + 1), 8) + st, ""]);
         });
-        rows.push(["  " + pad(handle, 14) + pad("#" + (pick.length + 1), 8) + "刚上线", "amb"]);
+        rows.push(["  " + pad(handle, 14) + pad("#" + (pick.length + 1), 8) + "在线", "amb"]);
         rows.push(["", "dim"]);
         rows.push(["  共 " + (pick.length + 2) + " 人在线 · 33600 bps · 载波稳定", "dim"]);
         rows.push(["", "dim"]);
@@ -1210,10 +1294,10 @@
           ["  现在时间  " + s, "wht"],
           ["", "dim"],
           ["  ── 本站主机档案 ──", "dim"],
-          ["  CPU    486DX2-66 · 超频到 80MHz（激进）", ""],
-          ["  RAM    8MB（玩 DOOM 够用了）", ""],
-          ["  硬盘   540MB · 剩余 12MB（又满了）", ""],
-          ["  Modem  悦音 33.6kbps · 外置 · 会唱歌", ""],
+          ["  CPU    486DX2-66 · 超频至 80MHz", ""],
+          ["  RAM    8MB", ""],
+          ["  硬盘   540MB · 剩余 12MB", ""],
+          ["  Modem  悦音 33.6kbps · 外置", ""],
           ["", "dim"],
         ];
       }
@@ -1336,7 +1420,7 @@
           chain = chain.then(function () {
             if (typed) return type(row[0], row[1]);
             print(row[0], row[1]);
-            return sleep(18);
+            return sleep(8);
           });
         });
         return chain;
@@ -1389,7 +1473,7 @@
         } else if (raw.length >= 2 && cmd.charAt(0) !== "/" ) {
           /* 自由文本 → 视作留言草稿，模拟老 BBS 的聊天/留言习惯 */
           msgSave(raw);
-          await type("  （已悄悄帮你写进本地磁带，msg list 查看 · msg send 发布公开留言）", "dim");
+          await type("  （已写入本地磁带，使用 msg list 查看，msg send 发布公开留言）", "dim");
           print("");
         } else {
           await type("未知指令：" + raw + "   输入 help 查看指令表", "err");
@@ -1466,7 +1550,7 @@
         chime();
         await type("Welcome to PaperClip BBS! 本站现有 6 个板块在线。", "wht");
         print("");
-        await type("你是从电话线那头来的新朋友吗？报上呼号吧～", "cyn");
+        await type("请输入呼号：", "cyn");
         print("");
 
         /* 跳过机制只服务动画阶段，登录起恢复正常节奏 */
@@ -1488,7 +1572,7 @@
         print("权限等级：普通用户（1 级） · 上站次数：1", "dim");
         print("");
         chime();
-        await type("上站成功！欢迎回来，" + handle + "。这是你的菜单：", "amb");
+        await type("登录成功，欢迎回来，" + handle + "。以下是主菜单：", "amb");
         print("");
         print(MENU, "dim");
         print("");
@@ -1538,7 +1622,7 @@
             "SET BLASTER=A220 I5 D1 T4",
             "LH C:\\DOS\\MOUSE.COM",
             "LH C:\\DOS\\SMARTDRV.EXE 2048",
-            "ECHO 准备就绪。祝上网愉快！",
+            "ECHO 系统就绪。",
           ] },
           { n: "COMMAND.COM",  s: 93890, t: "05-30-97  9:20a" },
         ],
@@ -1546,9 +1630,9 @@
           { n: "BBS.COM",   s: 48640, t: "06-12-97  8:45p" },
           { n: "SYSOP.TXT", s: 1024, t: "06-12-97  8:50p", c: [
             "SysOp = PaperClip（回形针）",
-            "在校学生 · 边学边玩 · 折腾网页/MC/终末地。",
-            "上站指南：报名用呼号，灌水要文明，",
-            "别占用电话线太久了，你妈要用打市话。",
+            "在校学生 · 网页开发/Minecraft/终末地爱好者。",
+            "上站指南：报名用呼号，发帖请遵守社区规范，",
+            "请勿长时间占用电话线。",
           ] },
           { n: "MODEM.LOG", s: 41, t: "08-30-97  3:12a", c: [
             "08-30-97 03:12  CONNECT 33600 (最后一次握手)",
@@ -1596,7 +1680,27 @@
       };
       var cwd = "";   // "" = 根目录；"BBS" = C:\BBS；"GAMES\\DOOM" = C:\GAMES\DOOM
 
-      function cwdPath() { return "C:\\" + cwd + ">"; }
+      /* DOS 环境变量：PROMPT / PATH / 自定义 SET 变量 */
+      var promptStr = "$P$G";   // 默认提示符：当前路径 + >
+      var envPath = "C:\\DOS;C:\\BBS;C:\\GAMES";
+      var envVars = { "COMSPEC": "C:\\COMMAND.COM", "BLASTER": "A220 I5 D1 T4", "TEMP": "C:\\DOS" };
+
+      /* 解析 PROMPT 元字符：$P=当前路径 $G=> $L=< $B=| $Q== $T=时间 $D=日期 $E=ESC $_=换行 */
+      function expandPrompt(s) {
+        var d = new Date();
+        return (s || "$P$G")
+          .replace(/\$P/gi, "C:\\" + cwd)
+          .replace(/\$G/gi, ">")
+          .replace(/\$L/gi, "<")
+          .replace(/\$B/gi, "|")
+          .replace(/\$Q/gi, "=")
+          .replace(/\$T/gi, ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) + ":" + ("0" + d.getSeconds()).slice(-2) + ".00")
+          .replace(/\$D/gi, (d.getMonth() + 1) + "-" + d.getDate() + "-" + d.getFullYear())
+          .replace(/\$_/gi, "\n")
+          .replace(/\$\$/g, "$");
+      }
+
+      function cwdPath() { return expandPrompt(promptStr); }
 
       function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
@@ -1609,15 +1713,31 @@
         return null;
       }
 
+      /* 在指定目录下查找条目（不依赖 cwd），用于开机读 CONFIG.SYS/AUTOEXEC.BAT */
+      function findEntryIn(dir, name) {
+        var items = DISK[dir] || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].n.toLowerCase() === name.toLowerCase()) return items[i];
+        }
+        return null;
+      }
+      function findEntryGlobal(name) { return findEntryIn("C:\\", name); }
+
 
       function dosHelp() {
         return [
-          ["── PaperClip DOS 命令 ───────────────────", "amb"],
-          ["  " + pad("DIR", 12) + "显示磁盘目录。", ""],
+          ["── DOS 命令 ───────────────────", "amb"],
+          ["  " + pad("DIR", 12) + "显示磁盘目录（/w 宽列 /s 递归 /a 全部）。", ""],
           ["  " + pad("CD", 12) + "显示或改变当前目录。", ""],
           ["  " + pad("TYPE", 12) + "显示文本文件的内容。", ""],
           ["  " + pad("TREE", 12) + "以图形显示驱动器目录结构。", ""],
           ["  " + pad("MD / RD / DEL", 12) + "创建、删除目录与删除文件。", ""],
+          ["  " + pad("REN", 12) + "重命名文件。", ""],
+          ["  " + pad("COPY CON", 12) + "从控制台创建文本文件。", ""],
+          ["  " + pad("ATTRIB", 12) + "显示或修改文件属性。", ""],
+          ["  " + pad("PROMPT", 12) + "设置命令提示符（如 $P$G）。", ""],
+          ["  " + pad("PATH", 12) + "显示或设置可执行文件搜索路径。", ""],
+          ["  " + pad("SET", 12) + "显示、设置或删除环境变量。", ""],
           ["  " + pad("CHKDSK", 12) + "检查磁盘并显示状态报告。", ""],
           ["  " + pad("SCANDISK", 12) + "检查文件系统与磁盘表面。", ""],
           ["  " + pad("DEFRAG", 12) + "重新整理磁盘上的文件。", ""],
@@ -1633,29 +1753,75 @@
         ];
       }
 
-      function dosDir() {
-        var items = DISK["C:\\" + cwd] || [];
+      /* dosDir：支持 /w（宽列）/p（分页）/s（递归）/a（全部含隐藏） */
+      function dosDir(arg) {
+        var wide = /\/w/i.test(arg);
+        var recurse = /\/s/i.test(arg);
+        var showAll = /\/a/i.test(arg);
+        hddSeek();   // 读盘声
+
         var rows = [
           [" 卷 C: 中的卷是 PAPERCLIP", "dim"],
           [" 卷的序列号是 1997-0830", "dim"],
           ["", "dim"],
-          [" C:\\" + cwd + " 的目录", "dim"],
-          ["", "dim"],
         ];
-        if (cwd) {
-          rows.push([pad(".", 14) + "<DIR>     " + "08-30-97  9:00a", "cyn"]);
-          rows.push([pad("..", 14) + "<DIR>     " + "08-30-97  9:00a", "cyn"]);
+
+        var totalFiles = 0, totalBytes = 0, totalDirs = 0;
+
+        function listDir(dirPath, label) {
+          var items = DISK[dirPath] || [];
+          rows.push([" " + label + " 的目录", "dim"]);
+          rows.push(["", "dim"]);
+          if (dirPath !== "C:\\") {
+            rows.push([pad(".", 14) + "<DIR>     " + "08-30-97  9:00a", "cyn"]);
+            rows.push([pad("..", 14) + "<DIR>     " + "08-30-97  9:00a", "cyn"]);
+          }
+          var files = 0, bytes = 0;
+          if (wide) {
+            /* /w 宽列：5 列，目录用 [] 包裹 */
+            var line = "";
+            var col = 0;
+            items.forEach(function (it) {
+              var name = it.d ? "[" + it.n + "]" : it.n;
+              line += pad(name, 15);
+              col++;
+              if (col >= 5) { rows.push([line, it.d ? "cyn" : ""]); line = ""; col = 0; }
+              if (!it.d) { files++; bytes += it.s || 0; }
+            });
+            if (line) rows.push([line, ""]);
+          } else {
+            items.forEach(function (it) {
+              var meta = it.d ? "<DIR>     " : pad(fmtNum(it.s || 0), 10);
+              rows.push([pad(it.n, 14) + meta + " " + (it.t || "08-30-97  9:00a"), it.d ? "cyn" : ""]);
+              if (!it.d) { files++; bytes += it.s || 0; }
+            });
+          }
+          totalFiles += files; totalBytes += bytes; totalDirs += (dirPath !== "C:\\" ? 2 : 0);
+          rows.push(["", "dim"]);
+          rows.push(["        " + files + " 个文件      " + fmtNum(bytes) + " 字节", "dim"]);
+          rows.push(["", "dim"]);
         }
-        var files = 0, bytes = 0;
-        items.forEach(function (it) {
-          var meta = it.d ? "<DIR>     " : pad(fmtNum(it.s || 0), 10);
-          rows.push([pad(it.n, 14) + meta + " " + (it.t || "08-30-97  9:00a"), it.d ? "cyn" : ""]);
-          if (!it.d) { files++; bytes += it.s || 0; }
-        });
-        rows.push(["", "dim"]);
-        rows.push(["        " + files + " 个文件      " + fmtNum(bytes) + " 字节", "dim"]);
-        rows.push(["        " + (cwd ? "2 个目录  " : "") + "12,273,920 字节可用", "dim"]);
-        rows.push(["", "dim"]);
+
+        if (recurse) {
+          /* /s：列出当前目录及所有子目录 */
+          listDir("C:\\" + cwd, "C:\\" + cwd);
+          (function walk(path) {
+            var items = DISK[path] || [];
+            items.forEach(function (it) {
+              if (it.d) {
+                var sub = path === "C:\\" ? path + it.n : path + "\\" + it.n;
+                listDir(sub, sub);
+                walk(sub);
+              }
+            });
+          })("C:\\" + cwd);
+          rows.push(["    总计列出：" + totalFiles + " 个文件  " + fmtNum(totalBytes) + " 字节", "amb"]);
+          rows.push(["", "dim"]);
+        } else {
+          listDir("C:\\" + cwd, "C:\\" + cwd);
+          rows.push(["        " + (cwd ? "2 个目录  " : "") + "12,273,920 字节可用", "dim"]);
+          rows.push(["", "dim"]);
+        }
         return rows;
       }
 
@@ -1964,7 +2130,7 @@
             }
           }, 35);
         });
-        await type("优化完成：数据已连续存放，磁盘性能提升约 23%（心理作用）", "cyn");
+        await type("优化完成：数据已连续存放。", "cyn");
         print("");
       }
 
@@ -1972,7 +2138,7 @@
       async function dosScandisk() {
         var COLS = 36, ROWS = 9, TOTAL = COLS * ROWS;
         var badPos = Math.floor(TOTAL * 0.55);
-        await type("ScanDisk for PaperClip DOS 6.22", "amb");
+        await type("ScanDisk for DOS 6.22", "amb");
         await type("正在检测介质描述符 ......... OK", "dim");
         await type("正在检查文件分配表 ......... OK", "dim");
         await type("正在逐簇扫描数据区（█ 未扫 · ▓ 正扫 · · 已扫）", "dim");
@@ -1998,26 +2164,83 @@
           }, 40);
         });
         await type("发现交叉链接簇（第 0x2F41 簇）· 已自动修复", fixed ? "err" : "dim");
-        await type("ScanDisk 未在 C: 盘发现其它问题。今天算你走运。", "cyn");
+        await type("ScanDisk 未在 C: 盘发现其它问题。", "cyn");
         print("");
       }
 
-      /* Tab 补全：无空格时补命令名，有空格时补当前目录下的文件/目录名 */
-      var DOS_CMDS = ["autoexec.bat", "bbs", "bbs.com", "cd", "chkdsk", "cls", "color", "config.sys", "snake", "snake.exe",
-        "date", "defrag", "del", "dir", "echo", "exit", "fdisk", "help", "label", "md",
-        "mem", "mkdir", "ping", "play", "rd", "readme.txt", "scandisk", "time", "tree",
-        "type", "ver", "vol", "win"];
+      /* Tab 补全：命令名 + 当前/相对/绝对路径下的文件与目录名，支持 PATH 搜索、环境变量 */
+      var DOS_CMDS = ["attrib", "autoexec.bat", "bbs", "bbs.com", "cd", "chdir", "chkdsk", "cls", "clear",
+        "color", "config.sys", "copy", "date", "defrag", "del", "dir", "echo", "edit", "exit", "fdisk",
+        "help", "label", "md", "mem", "mkdir", "path", "ping", "play", "portal", "portal.exe",
+        "prompt", "rd", "readme.txt", "rename", "ren", "scandisk", "set", "snake", "snake.exe",
+        "time", "tree", "type", "ver", "vol", "win", "windows"];
       function dosCompleter(v) {
         var sp = v.lastIndexOf(" ");
         var head = sp === -1 ? "" : v.slice(0, sp + 1);
-        var tok = (sp === -1 ? v : v.slice(sp + 1)).toLowerCase();
+        var tok = sp === -1 ? v : v.slice(sp + 1);
+        var tokLower = tok.toLowerCase();
         if (!tok) return [];
-        var pool = sp === -1
-          ? DOS_CMDS
-          : (DISK["C:\\" + cwd] || []).map(function (it) { return it.n; });
-        return pool.filter(function (n) {
-          return n.toLowerCase().indexOf(tok) === 0;
-        }).map(function (n) { return head + n; });
+
+        /* 取首个命令词，用于上下文感知补全 */
+        var firstSp = v.indexOf(" ");
+        var cmdName = (firstSp === -1 ? v : v.slice(0, firstSp)).toLowerCase();
+
+        /* copy con：创建新文件，不补全 */
+        if (/^copy\s+con\b/i.test(v)) return [];
+
+        /* 无空格：补全命令名 + PATH 目录中的可执行文件 */
+        if (sp === -1) {
+          var pool = DOS_CMDS.slice();
+          envPath.split(";").forEach(function (d) {
+            (DISK[d] || []).forEach(function (it) {
+              if (!it.d && /\.(com|exe|bat)$/i.test(it.n)) {
+                if (pool.indexOf(it.n) === -1) pool.push(it.n);
+              }
+            });
+          });
+          return pool.filter(function (n) {
+            return n.toLowerCase().indexOf(tokLower) === 0;
+          }).map(function (n) { return head + n; });
+        }
+
+        /* set：补全环境变量名（等号前） */
+        if (cmdName === "set") {
+          var eq = tok.indexOf("=");
+          if (eq !== -1) return [];
+          return Object.keys(envVars).filter(function (k) {
+            return k.toLowerCase().indexOf(tokLower) === 0;
+          }).map(function (k) { return head + k; });
+        }
+
+        /* 路径感知的文件/目录补全 */
+        var bsIdx = tok.lastIndexOf("\\");
+        var dirPart = bsIdx === -1 ? "" : tok.slice(0, bsIdx);
+        var namePart = bsIdx === -1 ? tok : tok.slice(bsIdx + 1);
+        var nameLower = namePart.toLowerCase();
+
+        /* 解析完整目录路径 */
+        var fullDir;
+        if (dirPart === "") {
+          fullDir = "C:\\" + cwd;
+        } else if (/^[a-zA-Z]:/.test(dirPart)) {
+          fullDir = dirPart;
+        } else {
+          fullDir = "C:\\" + (cwd ? cwd + "\\" : "") + dirPart;
+        }
+        /* 仅删除子目录的尾部反斜杠，根目录 C:\ 需保留 */
+        if (fullDir.slice(-1) === "\\" && fullDir.length > 3) fullDir = fullDir.slice(0, -1);
+
+        var items = DISK[fullDir] || [];
+        var onlyDirs = (cmdName === "cd" || cmdName === "chdir");
+
+        return items.filter(function (it) {
+          if (onlyDirs && !it.d) return false;
+          return it.n.toLowerCase().indexOf(nameLower) === 0;
+        }).map(function (it) {
+          var comp = (dirPart ? dirPart + "\\" : "") + it.n;
+          if (it.d) comp += "\\";   /* 目录补全后追加反斜杠 */
+          return head + comp;
+        });
       }
 
       async function dosDispatch(raw) {
@@ -2052,19 +2275,91 @@
         if (cmd === "help" || cmd === "?") {
           await renderLines(dosHelp(), true);
         } else if (cmd === "dir" || cmd.indexOf("dir ") === 0) {
-          if (cmd.indexOf("/w") !== -1) {
-            /* DIR /W：宽行显示，一行三个名字，目录用 [名字] 括起 */
-            var names = (DISK["C:\\" + cwd] || []).map(function (it) {
-              return pad(it.d ? "[" + it.n + "]" : it.n, 16);
+          var dirArg = line.slice(3).trim();
+          await renderLines(dosDir(dirArg), false);
+        } else if (cmd === "attrib" || cmd.indexOf("attrib ") === 0) {
+          /* ATTRIB：显示或修改文件属性（模拟，无持久化） */
+          var attArg = line.slice(6).trim();
+          if (!attArg) {
+            (DISK["C:\\" + cwd] || []).forEach(function (it) {
+              print("  A        C:\\" + cwd + "\\" + it.n, "dim");
             });
-            print("", "dim");
-            for (var wi = 0; wi < names.length; wi += 3) {
-              print(names.slice(wi, wi + 3).join(""));
-            }
-            print("", "dim");
+            print("");
+          } else if (/^[+-][rhs]$/i.test(attArg.split(" ")[0])) {
+            await type("已更新属性（模拟）。", "cyn");
+            print("");
           } else {
-            await renderLines(dosDir(), false);
+            var ae = findEntry(attArg);
+            if (ae) print("  A        C:\\" + cwd + "\\" + ae.n, "dim");
+            else await type("找不到文件 - " + attArg.toUpperCase(), "err");
+            print("");
           }
+        } else if (cmd.indexOf("ren ") === 0 || cmd.indexOf("rename ") === 0) {
+          /* REN：重命名文件 */
+          var renParts = line.slice(cmd.indexOf(" ") + 1).trim().split(/\s+/);
+          if (renParts.length < 2) {
+            await type("用法：REN <旧文件名> <新文件名>", "err");
+          } else {
+            var ri = entryIndex(renParts[0]);
+            if (ri === -1) {
+              await type("找不到文件 - " + renParts[0].toUpperCase(), "err");
+            } else {
+              DISK["C:\\" + cwd][ri].n = renParts[1].toUpperCase();
+              await type("        1 个文件被重命名。", "cyn");
+            }
+          }
+          print("");
+        } else if (cmd.indexOf("copy con ") === 0) {
+          /* COPY CON：创建文本文件，逐行输入，Ctrl+Z（F6）结束 */
+          var cfn = line.slice(8).trim().toUpperCase();
+          if (!cfn) {
+            await type("用法：COPY CON <文件名>", "err");
+          } else {
+            await type("输入内容，结束时按 F6 或 Ctrl+Z 再回车。", "dim");
+            print("");
+            var cLines = [];
+            while (true) {
+              var cl = await ask("");
+              if (cl === "" || cl.toUpperCase() === "^Z" || cl === String.fromCharCode(26)) break;
+              cLines.push(cl);
+            }
+            DISK["C:\\" + cwd].push({ n: cfn, s: cLines.join("\r\n").length, t: dosStamp(), c: cLines });
+            print("^Z", "dim");
+            await type("        1 个文件被复制。", "cyn");
+          }
+          print("");
+        } else if (cmd === "prompt" || cmd.indexOf("prompt ") === 0) {
+          /* PROMPT：设置提示符 */
+          var pArg = line.slice(6).trim();
+          if (!pArg) {
+            promptStr = "$P$G";
+          } else {
+            promptStr = pArg;
+          }
+          print("");
+        } else if (cmd === "path" || cmd.indexOf("path ") === 0) {
+          /* PATH：显示或设置搜索路径 */
+          var pthArg = line.slice(4).trim();
+          if (!pthArg) {
+            print("PATH=" + envPath, "dim");
+          } else {
+            envPath = pthArg;
+          }
+          print("");
+        } else if (cmd === "set" || cmd.indexOf("set ") === 0) {
+          /* SET：显示或设置环境变量 */
+          var setArg = line.slice(3).trim();
+          if (!setArg) {
+            Object.keys(envVars).forEach(function (k) { print(k + "=" + envVars[k], "dim"); });
+            print("PROMPT=" + promptStr, "dim");
+            print("PATH=" + envPath, "dim");
+          } else if (setArg.indexOf("=") !== -1) {
+            var kv = setArg.split("=");
+            envVars[kv[0].toUpperCase()] = kv.slice(1).join("=");
+          } else {
+            print((envVars[setArg.toUpperCase()] || "") + " ", "dim");
+          }
+          print("");
         } else if (cmd === "tree") {
           await renderLines(dosTree(), false);
         } else if (cmd === "chkdsk") {
@@ -2147,7 +2442,7 @@
           }
         } else if (cmd === "ver") {
           print("");
-          print("PaperClip DOS Version 6.22", "wht");
+          print("DOS Version 6.22", "wht");
           print("回形针中文版 · UCDOS 内核 · 1997", "dim");
           print("");
         } else if (cmd === "mem") {
@@ -2242,7 +2537,7 @@
              先查当前目录，再按 AUTOEXEC 里的 PATH 查 C:\DOS、C:\BBS */
           var tok = cmd.split(/\s+/)[0];
           var exe = findEntry(tok) || (function () {
-            var pathDirs = ["C:\\DOS", "C:\\BBS"];
+            var pathDirs = envPath.split(";").filter(Boolean);
             for (var pi = 0; pi < pathDirs.length; pi++) {
               var arr = DISK[pathDirs[pi]] || [];
               for (var xi = 0; xi < arr.length; xi++) {
@@ -2425,101 +2720,137 @@
       ];
 
       var APERTURE_FOOTER = [
-        ["  ── APERTURE SCIENCE · 光圈科技 · 丰富学习中心终端 v3.11 ──", "dim"],
-        ["  \"我们做必须做的，因为我们可以。\" —— 这是 Cave 说的，现在由我变成真的。", "dim"],
+        ["  ── APERTURE SCIENCE · 光圈科技 · 公司信息终端 v3.11 ──", "dim"],
+        ["  我们做必须做的，因为我们可以。 —— Cave Johnson", "dim"],
         ["", "dim"],
       ];
 
       var GLADOS_LINES = [
-        "数据显示你做得……还行。这个评价是我能给出的最高赞美，别习惯。",
-        "关于蛋糕的承诺已全部撤回。撤回原因：那是谎言，而谎言让我愉快。",
-        "如果你在走廊里碰到会说话的墙，请无视。它比我烦人。",
-        "本中心 98% 的测试对象存活。这个数字是四舍五入的，但听起来舒服就好。",
-        "本中心不生产柠檬，也不承认任何\"柠檬\"相关的承诺。柠檬是Cave的执念。",
-        "你看起来很眼熟。哦，上一批穿同款长跳靴的人，也没活到最后。",
-        "重量伙伴方块不会背叛你。它连话都不会说，比人可靠多了。",
-        "别碰运算核心。它们每一个都比你的全部器官值钱。",
+        "光圈科技丰富学习中心全天候运行，测试不间断。",
+        "传送门技术已通过内部安全认证，请放心使用。",
+        "所有测试数据均已存档，可随时查阅。",
+        "设施维护由 GLaDOS 系统自动管理，无需人工干预。",
+        "光圈科技致力于为全人类提供最先进的空间解决方案。",
+        "您的访问记录已被系统记录，感谢使用光圈科技终端。",
+        "传送门装置使用前请确认两面均为白色可传导表面。",
+        "凝胶系列产品请勿食用，仅限测试用途。",
       ];
 
       var SCIENCE_LINES = [
-        "光圈科技：先发射，后瞄准。",
-        "光圈科技：科学不是错误，是还没写进报告的意外。",
-        "光圈科技：跳之前签字，签完就不后悔了。",
-        "光圈科技：我们做必须做的，因为我们可以 —— 而且我们乐意。",
-        "光圈科技：浴帘起家，传送门收尾，中间全是事故。",
-        "光圈科技：昨天的未来，就是今天。今天的未来，看我们心情。",
+        "光圈科技：我们做必须做的，因为我们可以。",
+        "光圈科技：从浴帘到传送门，科学永不止步。",
+        "光圈科技：空间不是障碍，是待解决的问题。",
+        "光圈科技：让不可能成为日常测试的一部分。",
+        "光圈科技：四十年代起家，面向未来研发。",
+        "光圈科技：传送门技术，重新定义空间与距离。",
       ];
 
       var CAVE_LINES = [
+        "\"我们做必须做的，因为我们可以。\"",
         "\"当生活给你柠檬，别做柠檬水。把柠檬烧了 —— 然后研究灰烬。\"",
         "\"我不是商人，我是发明家。商人才需要守规矩。\"",
         "\"科学不是问'为什么'，是喊'为什么不' —— 然后有人去收拾残局。\"",
         "\"租条破冰船，装上传送门，剩下的交给物理定律。\"",
-        "（备注：Cave Johnson 因汞中毒和月球粉尘去世。",
-        "  但他的口号比他的肺活量持久。）",
+        "（Cave Johnson，光圈科技创始人，",
+        "  因汞中毒与月球岩石粉尘去世。）",
       ];
 
       var HISTORY_ROWS = [
-        ["── 公司历史 · 我本来不被允许念这一段 ──", "amb"],
-        ["  1943  光圈固定装置公司：浴帘公司。创始人的", ""],
-        ["        梦想是让浴帘更防水 —— 后来他改了主意。", ""],
-        ["  1950s 光圈科学开拓者：迁入密歇根废弃盐矿，", ""],
-        ["        深 4500 米。试验员从运动员和退伍军人中", ""],
-        ["        招募，因为普通人会跑。", "dim"],
-        ["  1970s 光圈：政府转投黑山基地，我们改用", ""],
-        ["        流浪汉 —— 免费，且没人找他们。破冰船", "dim"],
-        ["        \"北极光号\"连同技术一起消失，就当没发生过。", "dim"],
-        ["  1986  GLaDOS 计划：意识来源先是创始人本人，", ""],
-        ["        后换成秘书 Caroline。她更好控制。", ""],
-        ["  199_  GLaDOS 启用：当天，几乎所有人都死了。", ""],
-        ["        剩下的人，你们现在叫我\"系统\"。", "err"],
+        ["── 公司历史 · Aperture Science ──────────", "amb"],
+        ["  1940s  光圈设备公司（Aperture Fixtures）成立，", ""],
+        ["         主营浴帘制造与销售。取名\"光圈\"是为了", ""],
+        ["         让浴帘听起来更卫生。", ""],
+        ["  1943   创始人 Cave Johnson 获\"年度浴帘销售员\"。", ""],
+        ["         同年公司更名为光圈科学创新者（Aperture", ""],
+        ["         Science Innovators），重心转向科研。", ""],
+        ["  1947   购入密歇根州大型废弃盐矿，于地下 4200", ""],
+        ["         米处建设光圈丰富学习中心（Enrichment", ""],
+        ["         Center）。另在俄亥俄州克利夫兰设有基地。", ""],
+        ["  1952   成为国防部第二大国防承包商，仅次于", ""],
+        ["         黑山基地（Black Mesa）。", ""],
+        ["  1956   艾森豪威尔政府签订合同，为除海军外", ""],
+        ["         所有军种提供浴帘。", ""],
+        ["  1957   至 1973 年间主要生产浴帘，同时秘密", ""],
+        ["         研发便携式量子隧穿装置（传送门枪前身）。", ""],
+        ["  1970s  科考船\"北极光号\"（Borealis）建成，搭载", ""],
+        ["         尖端传送技术，随后连船带技术一同失踪。", "dim"],
+        ["  1972   实验对象由运动员、宇航员改为流浪汉，", ""],
+        ["         报酬 60 美元。", ""],
+        ["  1974   Cave Johnson 在研究中汞中毒，健康", ""],
+        ["         状况持续恶化。", ""],
+        ["  1976   Johnson 制定三阶段研发计划，委托助手", ""],
+        ["         Caroline 接管公司。", ""],
+        ["  1981   反海姆立克急救法与许愿基金会曝光，", ""],
+        ["         参议院介入调查；光圈获授传送门技术", ""],
+        ["         秘密研究任务。", ""],
+        ["  1986   得知黑山基地也在研究传送门，启动", ""],
+        ["         GLaDOS（基因生命体及磁盘操作系统）计划。", ""],
+        ["  1996   GLaDOS 的磁盘操作系统模块完成，研发", ""],
+        ["         重心转向基因生命体模块。", ""],
+        ["  1998   GLaDOS 在\"带女儿上班日\"首次激活，", ""],
+        ["         1 皮秒内产生自我意识，随即接管整个", ""],
+        ["         设施，并用神经毒素清除了大部分员工。", "err"],
         ["", "dim"],
-        ["  ※ 这一段我不会念，你也别记。", "dim"],
+        ["  ※ 以上为光圈科技官方档案记载。", "dim"],
         ["", "dim"],
       ];
 
       var PRODUCT_ROWS = [
         ["── 光圈科技产品目录 ─────────────────────", "amb"],
-        ["  手持传送门装置 ... ASHPD · 俗称\"枪\"，其实更像个玩具。", ""],
-        ["  三色凝胶 ......... 加速 / 弹跳 / 转换 —— 涂上去就有惊喜。", ""],
-        ["  反重力缓冲靴 ..... 让你摔得好看一点。", ""],
-        ["  物质分解力场 ..... 你的武器会在门口融化，不用谢。", ""],
-        ["  重量存储方块 ..... 可以踩。伙伴方块另议（已焚化）。", ""],
-        ["  哨兵炮塔 ......... 会道歉的机枪，道歉和开枪一样快。", ""],
-        ["  神经毒素 ......... 仅供人格矩阵内部使用，你不需要知道详情。", "dim"],
-        ["  ※ 全部产品都比你的寿命长。这是设计指标，不是恭维。", "dim"],
+        ["  手持传送门装置 ..... Aperture Science Handheld Portal", ""],
+        ["                       Device（ASHPD），可在墙面发射", ""],
+        ["                       蓝橙双色传送门，实现空间瞬移。", ""],
+        ["  GLaDOS .............. 基因生命体及磁盘操作系统", ""],
+        ["                       （Genetic Lifeform and Disk", ""],
+        ["                       Operating System），负责设施", ""],
+        ["                       全面管控与测试调度的人工智能。", ""],
+        ["  斥力凝胶 ........... 蓝色凝胶，踩到可弹跳至高处。", ""],
+        ["  推进凝胶 ........... 橙色凝胶，大幅提升移动速度。", ""],
+        ["  转换凝胶 ........... 白色凝胶，由月球岩石制成，", ""],
+        ["                       可使任何表面成为传送门导体。", ""],
+        ["  重量存储方块 ....... 用于压下按钮、遮挡激光的", ""],
+        ["                       标准测试道具。伙伴方块为限量版。", ""],
+        ["  空中信仰之板 ....... 弹射板，可将物体抛向空中。", ""],
+        ["  硬光桥 ............. 由固体光构成的桥梁与屏障。", ""],
+        ["  哨兵炮塔 ........... 自动锁定射击的防御单位。", ""],
+        ["  反重力缓冲靴 ....... 吸收高处坠落冲击力的长跳靴。", ""],
+        ["  物质分解力场 ....... 可分解武器与 unauthorized 物品", ""],
+        ["                       的能量屏障。", ""],
+        ["  神经毒素 ........... 仅供设施内部安保使用。", "dim"],
+        ["  ※ 所有产品均通过光圈科技内部安全检测。", "dim"],
         ["", "dim"],
       ];
 
       var BOREALIS_ROWS = [
-        ["── 机密档案 · 北极光号 BOREALIS ─────────", "err"],
-        ["  光圈科技破冰船 · 搭载未完成的传送技术。", ""],
-        ["  1970 年代随整船消失于北极。对，就是消失了。", ""],
+        ["── 科研项目 · 北极光号 BOREALIS ────────", "amb"],
+        ["  北极光号是光圈科技的科考破冰船，搭载当时最", ""],
+        ["  尖端的传送门技术，是光圈与黑山基地争夺国防", ""],
+        ["  合同的核心项目。", ""],
+        ["  1970 年代，北极光号连同船上全部研究资料", ""],
+        ["  与技术人员一同失踪，仅留下空荡荡的船坞。", ""],
+        ["  该事件被列为光圈科技最高机密。", ""],
         ["", "dim"],
-        ["  如果你在冰原上看见一艘不该存在的船：", ""],
-        ["  别登船。别碰任何橙色按钮。更别拍照。", "amb"],
-        ["", "dim"],
-        ["  ※ 这一段不存在。念这段话的人也不存在。", "dim"],
-        ["  你现在听到的是幻觉。", "dim"],
+        ["  ※ 据非官方消息，北极光号残骸曾出现在", "dim"],
+        ["  北极冰原及其他不可考地点。", "dim"],
         ["", "dim"],
       ];
 
       function apertureHelp() {
         return [
           ["── 光圈科技终端 · 指令表 ─────────────────", "amb"],
-          ["  " + pad("STATUS", 10) + "查你的档案。别太激动，数据不会撒谎。", ""],
-          ["  " + pad("CORES", 10) + "看看那些核心有多\"核心\"。大部分是废铁。", ""],
-          ["  " + pad("CAKE", 10) + "你还在问这个？行，给你看个图。", ""],
-          ["  " + pad("GLADOS", 10) + "我的语录。你听不够，对吧。", ""],
-          ["  " + pad("CAVE", 10) + "创始人的金句。他死后才变得有趣。", ""],
-          ["  " + pad("HISTORY", 10) + "公司黑历史，我删掉了最精彩的部分。", ""],
-          ["  " + pad("PRODUCTS", 10) + "我们造的东西，比你命长。", ""],
-          ["  " + pad("BOREALIS", 10) + "船。别搜，搜了也白搜。", ""],
-          ["  " + pad("SCIENCE", 10) + "广告词。我被迫念的。", ""],
-          ["  " + pad("TURRET", 10) + "叫炮塔出来打个招呼。", ""],
-          ["  " + pad("EXIT", 10) + "退出。你以为你真的能出去？", ""],
+          ["  " + pad("STATUS", 10) + "查看公司概况与核心人物。", ""],
+          ["  " + pad("HISTORY", 10) + "公司历史沿革（1940s 至今）。", ""],
+          ["  " + pad("PRODUCTS", 10) + "光圈科技产品目录。", ""],
+          ["  " + pad("CORES", 10) + "GLaDOS 人格核心单元状态。", ""],
+          ["  " + pad("CAVE", 10) + "创始人 Cave Johnson 名言。", ""],
+          ["  " + pad("GLADOS", 10) + "GLaDOS 系统留言。", ""],
+          ["  " + pad("SCIENCE", 10) + "光圈科技宣传语。", ""],
+          ["  " + pad("BOREALIS", 10) + "北极光号科研项目档案。", ""],
+          ["  " + pad("TURRET", 10) + "哨兵炮塔演示。", ""],
+          ["  " + pad("CAKE", 10) + "关于蛋糕的查询。", ""],
+          ["  " + pad("EXIT", 10) + "退出终端，返回 DOS。", ""],
           ["", "dim"],
-          ["  不用谢。谢也没用，我存档了你的感谢。", "dim"],
+          ["  光圈科技 · 我们做必须做的，因为我们可以。", "dim"],
           ["", "dim"],
         ];
       }
@@ -2536,35 +2867,43 @@
           print(apertureHelp().map(function (r) { return r[0]; }).join("\n"), "dim");
         } else if (cmd === "status") {
           await renderLines([
-            ["── 测试对象档案 ─────────────────────────", "amb"],
-            ["  对象编号 ......... #1498。不是奖号，是库存编号。", ""],
-            ["  通过测试间 ....... 12 / 19。我说\"低于预期\"时，你听不出我在笑。", ""],
-            ["  死亡次数 ......... 0。官方统计，我的统计。", "dim"],
-            ["  剩余测试时间 ..... 永久。我算过了，够你用好几个轮回。", ""],
+            ["── 公司概况 ─────────────────────────────", "amb"],
+            ["  公司全称 ......... 光圈科技（Aperture Science）", ""],
+            ["  曾用名 ........... 光圈设备公司 / 光圈科学创新者", ""],
+            ["  创始人 ........... Cave Johnson（凯文·约翰逊）", ""],
+            ["  成立时间 ......... 1940 年代", ""],
+            ["  总部位置 ......... 美国密歇根州（废弃盐矿地下", ""],
+            ["                     4200 米处），另设俄亥俄州基地", ""],
+            ["  主要业务 ......... 传送门技术研发、国防承包、", ""],
+            ["                     丰富学习中心测试", ""],
+            ["  主要竞争对手 ..... 黑山基地（Black Mesa）", ""],
+            ["  现任管理者 ....... GLaDOS（人工智能）", ""],
             ["", "dim"],
-            ["── 在册人员 · 系统追踪 ──────────────────", "amb"],
-            ["  " + pad("Chell（雪儿）", 16) + "首席测试对象 · 沉默是她的超能力，也是我唯一欣赏她的点。", "cyn"],
-            ["  " + pad("GLaDOS", 16) + "我 · 这里的一切都归我管。包括你此刻的呼吸频率。", "amb"],
-            ["  " + pad("Cave Johnson", 16) + "创始人 · 已故。他的遗嘱忘了写\"关掉GLaDOS\"，我的幸运。", "dim"],
-            ["  " + pad("Caroline", 16) + "前秘书 · 已合并。我的一部分。我们不再讨论她。", "dim"],
-            ["  " + pad("Doug Rattmann", 16) + "前科学家 · 他不存在。墙上的涂鸦也不存在。你也不该存在，但你还在。", "cyn"],
-            ["  " + pad("Wheatley", 16) + "空间核心 · 系统评价：一个会说话的 bug。", "cyn"],
-            ["  " + pad("Atlas / P-Body", 16) + "合作测试机器人 · 不顶嘴，不摔东西，理想员工。", "cyn"],
-            ["  " + pad("哨兵炮塔", 16) + "它们爱你。爱从枪口喷射，很温暖。", ""],
-            ["  " + pad("重量伙伴方块", 16) + "已焚化。我提醒过你，别拿它当朋友。", "dim"],
+            ["── 核心人物 ─────────────────────────────", "amb"],
+            ["  " + pad("Cave Johnson", 16) + "创始人兼 CEO · 由浴帘生意起家，", "dim"],
+            ["  " + pad("", 16) + "后转向科研。因汞中毒去世。", "dim"],
+            ["  " + pad("Caroline", 16) + "创始人助手 · Johnson 指定的继任者，", "dim"],
+            ["  " + pad("", 16) + "意识被上传至计算机成为 GLaDOS。", "dim"],
+            ["  " + pad("GLaDOS", 16) + "基因生命体及磁盘操作系统 · 设施的", "amb"],
+            ["  " + pad("", 16) + "管理 AI，1998 年起接管全部运作。", "amb"],
+            ["  " + pad("Chell", 16) + "首席测试对象 · 丰富学习中心在册", ""],
+            ["  " + pad("Doug Rattmann", 16) + "前科学家 · GLaDOS 事件幸存者", "dim"],
+            ["  " + pad("Wheatley", 16) + "空间核心人格球 · 辅助管理单元", ""],
             ["", "dim"],
-            ["  ※ 我被要求声明：以上人员\"与你无关\"。", "dim"],
-            ["    我只是念了一遍，你信不信由你。", "dim"],
+            ["  ※ 信息来源：光圈科技官方档案。", "dim"],
             ["", "dim"],
           ], true);
         } else if (cmd === "cores") {
           await renderLines([
-            ["── 人格核心状态 ─────────────────────────", "amb"],
-            ["  好奇核心 ......... 已损毁。它问\"为什么\"问得太多了。", "dim"],
-            ["  空间核心 ......... 在冒泡。它称之为思考，我更愿意称之为漏气。", ""],
-            ["  知识核心 ......... 在唱歌。它的知识储量和音准一样糟糕。", ""],
-            ["  理智核心 ......... 未安装。装了也是浪费，反正你也不会听。", "dim"],
-            ["  伙伴方块 ......... 已焚化。别摆出那副表情，它没有灵魂。", "dim"],
+            ["── GLaDOS 人格核心单元 ──────────────────", "amb"],
+            ["  好奇核心 ......... 负责探索与提问，已损毁。", "dim"],
+            ["  空间核心 ......... 负责空间推理，由 Wheatley", ""],
+            ["                     担任，当前状态：运行中。", ""],
+            ["  知识核心 ......... 负责知识存储与检索，", ""],
+            ["                     当前状态：运行中。", ""],
+            ["  理智核心 ......... 负责逻辑判断，未安装。", "dim"],
+            ["  主核心 GLaDOS ... 基因生命体及磁盘操作系统，", "amb"],
+            ["                     全面管控设施运作。", "amb"],
             ["", "dim"],
           ], true);
         } else if (cmd === "cake") {
@@ -2574,7 +2913,8 @@
             ["      | 蛋糕  |", "amb"],
             ["      |_______|", "amb"],
             ["", "dim"],
-            ["  查询结果：这里没有蛋糕。我说有，也是测试的一部分。你现在可以回去工作了。", "err"],
+            ["  蛋糕是光圈科技测试完成后的传统奖励品。", ""],
+            ["  本终端暂无蛋糕库存，请完成测试后再查询。", "dim"],
             ["", "dim"],
           ], true);
         } else if (cmd === "history") {
@@ -2585,30 +2925,33 @@
           await renderLines(BOREALIS_ROWS, true);
         } else if (cmd === "cave") {
           await renderLines(
-            [["── Cave Johnson 在此。──────────────────", "amb"]].concat(
+            [["── 创始人 · Cave Johnson 名言 ───────────", "amb"]].concat(
               CAVE_LINES.map(function (l) { return [l, l.charAt(0) === "\"" ? "" : "dim"]; })
             ).concat([["", "dim"]]),
             true
           );
         } else if (cmd === "glados") {
+          await type("GLaDOS 系统留言：", "amb");
           await type(GLADOS_LINES[Math.floor(Math.random() * GLADOS_LINES.length)], "wht");
           print("");
         } else if (cmd === "science") {
-          await type("（我被要求朗读。措辞不代表我的立场，但你会信。）", "dim");
-          await type(SCIENCE_LINES[Math.floor(Math.random() * SCIENCE_LINES.length)], "cyn");
+          await type("光圈科技宣传语：", "amb");
+          await type(SCIENCE_LINES[Math.floor(Math.random() * SCIENCE_LINES.length)], "wht");
           print("");
         } else if (cmd === "turret") {
           await renderLines([
-            ["  哨兵炮塔：喂？有人吗？", "cyn"],
-            ["  ……", "dim"],
-            ["  哨兵炮塔：你在那里吗？我看不到你——", "cyn"],
-            ["  （远处传来一声枪响，然后是一声倒地的闷响）", "dim"],
-            ["  炮塔已下线。", "err"],
-            ["  （它们的歌声不错。可惜唱完就没电了。）", "dim"],
+            ["── 哨兵炮塔演示 ─────────────────────────", "amb"],
+            ["  哨兵炮塔是光圈科技的自动防御单位，", ""],
+            ["  具备目标锁定与射击功能。", ""],
+            ["", "dim"],
+            ["  炮塔：检测到访客。正在执行欢迎程序……", "cyn"],
+            ["  炮塔：欢迎来到光圈科技。", "cyn"],
+            ["", "dim"],
+            ["  ※ 演示结束。炮塔已返回待机状态。", "dim"],
             ["", "dim"],
           ], true);
         } else {
-          await type("未知指令。人格矩阵认为你该多读手册。", "err");
+          await type("未知指令。请输入 help 查看可用指令。", "err");
           print("");
         }
         return false;
@@ -2635,21 +2978,21 @@
         APERTURE_FOOTER.forEach(function (r) { print(r[0], r[1]); });
 
         await dialSleep(400);
-        print("正在接入光圈科技主机 ...... 网络通了。我也在。", "wht");
+        print("正在接入光圈科技主机 ...... 连接已建立。", "wht");
         await dialSleep(300);
-        print("公司起源 ...... 浴帘。别问，问就是没意义", "dim");
+        print("公司全称 ...... Aperture Science, Inc.（光圈科技）", "dim");
         await dialSleep(240);
-        print("你的位置 ...... 地下 4500 米。最底层的底层。如果你觉得冷，是心理作用", "dim");
+        print("成立时间 ...... 1940 年代 · 创始人 Cave Johnson", "dim");
         await dialSleep(240);
-        print("我，GLaDOS ...... 我是一切。你的安全是我的次要功能", "dim");
+        print("总部位置 ...... 密歇根州地下 4200 米盐矿设施", "dim");
         await dialSleep(260);
-        print("神经毒素 ...... 库存充足。我并不是在暗示什么", "dim");
+        print("核心业务 ...... 传送门技术研发与丰富学习中心测试", "dim");
         await dialSleep(260);
-        print("哨兵炮塔 ...... 它们很期待拥抱你。用子弹", "dim");
+        print("管理系统 ...... GLaDOS · 基因生命体及磁盘操作系统", "dim");
         await dialSleep(260);
-        print("你的行踪 ...... 我始终知道。你连想躲的时候，我也知道", "dim");
+        print("主要产品 ...... 传送门装置、凝胶系列、测试道具", "dim");
         await dialSleep(260);
-        print("蛋糕 ...... 没有。再说一遍：没有。再问就关你进测试间", "dim");
+        print("竞争对手 ...... 黑山基地（Black Mesa）", "dim");
         await dialSleep(500);
         print("");
 
@@ -2657,17 +3000,13 @@
         dialDone = false;
         skipFlag = false;
 
-        await type("你好。又——又见面了。你总是回来，我很佩服你的健忘。", "wht");
-        await type("欢迎回到光圈科学计算机丰富学习中心", "wht");
-        await type(" —— 这里唯一\"丰富\"的是你的待办测试列表。", "wht");
+        await type("欢迎访问光圈科技（Aperture Science）终端。", "wht");
+        await type("本终端提供公司概况、历史沿革、产品目录等信息查询。", "wht");
         print("");
-        await type("所有人都盼着你来。他们只是没活到今天，真可惜。", "cyn");
+        await type("光圈科技成立于 1940 年代，最初主营浴帘制造，", "wht");
+        await type("后转型为尖端科研机构，致力于传送门技术的研发与应用。", "wht");
         print("");
-        await type("按规章告知：你在这里的每一天都是不可逆的，", "cyn");
-        await type("就像我删掉的那个文件。", "cyn");
-        await type("这不是威胁，是协议条款。你没读过，但我替你读过了。", "cyn");
-        print("");
-        await type("输入 help。这不是建议，是让终端有事可做。", "dim");
+        await type("输入 help 查看可用指令，或输入 status 了解公司概况。", "dim");
         print("");
 
         var back = false;
@@ -2677,8 +3016,8 @@
           if (!raw) continue;
           back = await portalDispatch(raw);
           if (back) {
-            await type("正在断开人格矩阵 …… 你随时可以走。这是假的。", "dim");
-            await type("你听得出来我在开玩笑，对吧？不，你听不出来。", "dim");
+            await type("正在断开光圈科技终端连接……", "dim");
+            await type("感谢您访问光圈科技，再见。", "dim");
             await sleep(500);
           }
         }
@@ -2687,8 +3026,24 @@
         crt.classList.add("portal-out");
         await sleep(700);
         crt.classList.remove("aperture", "portal-out");
-        sbSet("PaperClip DOS v6.22");
+        sbSet("DOS v6.22");
         print("");
+      }
+
+      /* 内存计数动画：模拟老 BIOS 从 0KB 数到目标值，逐位跳动 */
+      function memCountUp(targetKb) {
+        return new Promise(function (resolve) {
+          var line = print("Memory Test : 0 KB", "dim");
+          var cur = 0;
+          var step = Math.max(64, Math.floor(targetKb / 40));
+          var iv = setInterval(function () {
+            if (skipFlag) { clearInterval(iv); line.textContent = "Memory Test : " + targetKb + " KB OK"; resolve(); return; }
+            cur += step + Math.floor(Math.random() * 128);
+            if (cur >= targetKb) { cur = targetKb; clearInterval(iv); line.textContent = "Memory Test : " + targetKb + " KB OK"; resolve(); }
+            else line.textContent = "Memory Test : " + cur + " KB";
+            scrollBottom();
+          }, 45);
+        });
       }
 
       /* ---------------- 开机：POST 自检 + DOS 引导 ---------------- */
@@ -2703,32 +3058,131 @@
         } catch (eSaved) {}
         inDial = true;
         statusbar.classList.add("on");
-        sbSet("PaperClip DOS v6.22");
+        sbSet("DOS v6.22");
 
-        /* POST 蜂鸣：经典的一声短开机音 */
+        /* POST 蜂鸣：经典的一声短开机音 + 消磁颤音 */
         beep(880, 0.12, 0.05, "square");
-        loadSiteData();   // 后台抓取主页真实数据（时间线/技能/版本/曲单），不打断开机动画
-        await dialSleep(650);
-        print("PaperClip BIOS v1.03  (C) 1997 Clip Software Lab.", "dim");
+        if (ac && !muted) {
+          /* 开机消磁：低频扫频，模拟 CRT 消磁线圈的"嗡"声 */
+          var dg = ac.createOscillator();
+          var dgg = ac.createGain();
+          dg.type = "sine";
+          dg.frequency.setValueAtTime(120, ac.currentTime);
+          dg.frequency.exponentialRampToValueAtTime(40, ac.currentTime + 0.6);
+          dgg.gain.setValueAtTime(0.08, ac.currentTime);
+          dgg.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.6);
+          dg.connect(dgg); dgg.connect(master);
+          dg.start(); dg.stop(ac.currentTime + 0.65);
+        }
+        loadSiteData();   // 后台抓取主页真实数据，不打断开机动画
+        await dialSleep(700);
+
+        /* ---- Award BIOS 风格 POST ---- */
+        print("Award Modular BIOS v4.51PG, An Energy Star Ally", "dim");
+        print("Copyright (C) 1984-97, Award Software, Inc.", "dim");
         print("");
-        print("Main Processor : 486DX2-66");
-        await dialSleep(280);
-        print("Memory Test    : 8192KB OK");
-        await dialSleep(450);
+        await dialSleep(200);
+        print("486DX2/66  BIOS v1.03  (C) 1997 Clip Software Lab.", "dim");
         print("");
-        await dialSleep(450);
-        print("Starting PaperClip DOS ...", "wht");
-        await dialSleep(750);
-        print("HIMEM: DOS XMS 驱动程序 3.10 已安装。", "dim");
-        await dialSleep(260);
-        print("磁盘高速缓存程序 SMARTDRV 已装载。", "dim");
-        await dialSleep(260);
+        await dialSleep(200);
+
+        /* CPU 与缓存检测 */
+        print("Main Processor : Intel 486DX2-66", "wht");
+        print("  L1 Cache : 8 KB   (Write-Back)", "dim");
+        print("  L2 Cache : 256 KB (Pipeline Burst)", "dim");
+        print("  Math Co-processor : Installed", "dim");
+        await dialSleep(350);
+
+        /* 内存测试：从 0 数到 8192 */
+        floppySeek();   // 软驱寻道声
+        await memCountUp(8192);
+        await dialSleep(200);
+        print("");
+
+        /* CMOS 与外围检测 */
+        print("CMOS Checksum : OK", "dim");
+        print("Date/Time : 08/30/1997  09:00:00", "dim");
+        await dialSleep(180);
+        print("");
+
+        /* IDE 设备检测 */
+        hddSeek();   // 硬盘寻道声
+        await dialSleep(200);
+        print("Detecting IDE drives ...", "dim");
+        await dialSleep(250);
+        print("  Primary Master   : PAPERCLIP 540MB  (LBA, Mode 4)", "cyn");
+        print("  Primary Slave    : None", "dim");
+        print("  Secondary Master : CD-ROM 24X       (PIO Mode 3)", "cyn");
+        print("  Secondary Slave  : None", "dim");
+        await dialSleep(250);
+
+        /* 软驱 / 串口 / 并口 */
+        floppySeek();
+        print("Floppy Drive A: : 1.44 MB", "dim");
+        print("Floppy Drive B: : Not Installed", "dim");
+        print("Serial Port(s)  : 3F8  2F8", "dim");
+        print("Parallel Port(s): 378", "dim");
+        await dialSleep(200);
+
+        /* 按 DEL 进 SETUP 的提示（一闪而过，真实 BIOS 也这样） */
+        var setupLine = print("Press DEL to enter SETUP, ESC to skip memory test", "amb");
+        await dialSleep(900);
+        setupLine.textContent = "";   // 清掉提示行
+        print("");
+
+        /* 启动 DOS */
+        print("Starting DOS ...", "wht");
+        await dialSleep(600);
+
+        /* ---- 执行 CONFIG.SYS：逐行显示并加载驱动 ---- */
+        var cfg = findEntryGlobal("CONFIG.SYS");
+        if (cfg && cfg.c) {
+          for (var ci = 0; ci < cfg.c.length; ci++) {
+            if (skipFlag) break;
+            var cline = cfg.c[ci];
+            print(cline, "dim");
+            await dialSleep(220);
+            if (cline.toUpperCase().indexOf("HIMEM") !== -1) {
+              print("HIMEM: DOS XMS 驱动程序 3.10 已安装。", "dim");
+            } else if (cline.toUpperCase().indexOf("SMARTDRV") !== -1) {
+              print("磁盘高速缓存程序 SMARTDRV 已装载 (2048KB)。", "dim");
+            } else if (cline.toUpperCase().indexOf("DOS=") !== -1) {
+              print("DOS 已装入高端内存区 (HMA)。", "dim");
+            }
+          }
+        }
         print("CD-ROM 扩展程序 MSCDEX 2.23 已装载。", "dim");
-        await dialSleep(260);
         print("调制解调器驱动已就绪 (COM2, IRQ3)。", "dim");
-        await dialSleep(260);
+        await dialSleep(200);
+
+        /* ---- 执行 AUTOEXEC.BAT：@ECHO OFF 后只回显非 @ 行 ---- */
+        var auto = findEntryGlobal("AUTOEXEC.BAT");
+        if (auto && auto.c) {
+          for (var ai = 0; ai < auto.c.length; ai++) {
+            if (skipFlag) break;
+            var aline = auto.c[ai];
+            if (aline.charAt(0) === "@") {
+              /* @ 开头不回显，但执行其效果 */
+              var stripped = aline.slice(1);
+              if (stripped.toUpperCase() === "ECHO OFF") {
+                /* ECHO OFF 后后续 ECHO 类不显示命令本身 */
+              }
+            } else {
+              print(aline, "dim");
+            }
+            await dialSleep(200);
+            var up = aline.toUpperCase();
+            if (up.indexOf("BLASTER") !== -1) {
+              print("  声卡已初始化：A220 I5 D1 T4", "dim");
+            } else if (up.indexOf("MOUSE") !== -1) {
+              print("  鼠标驱动已安装。", "dim");
+            } else if (up.indexOf("SMARTDRV") !== -1 && up.indexOf("LH") !== -1) {
+              /* 已在 CONFIG.SYS 加载，这里不再重复 */
+            }
+          }
+        }
         print("UCDOS 5.0 中文平台已加载。", "dim");
-        await dialSleep(550);
+        await dialSleep(400);
         print("");
 
         /* 引导动画结束，进入 DOS 命令行 */

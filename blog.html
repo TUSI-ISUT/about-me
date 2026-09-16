@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="PaperClip 的博客：折腾网页、玩 Minecraft、听终末地的歌，记录学习与生活。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="PaperClip" />
+  <meta property="og:title" content="PaperClip | 博客" />
+  <meta property="og:description" content="记录折腾网页、玩 Minecraft、听终末地的歌，以及学习中的碎碎念。" />
+  <meta property="og:url" content="https://hell0.dpdns.org/blog.html" />
+  <meta property="og:image" content="https://hell0.dpdns.org/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://hell0.dpdns.org/blog.html" />
+  <title>PaperClip | 博客</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1017" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4ef" />
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var theme = (saved === "light" || saved === "dark")
+        ? saved
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      if (theme === "light") document.documentElement.classList.add("light");
+
+      var nativeVT = ("onpageswap" in document) || ("onpagereveal" in document);
+      var fromSite = null;
+      try { fromSite = sessionStorage.getItem("pt"); } catch (e) {}
+      if (!nativeVT && fromSite === "1") {
+        document.documentElement.classList.add("page-entering");
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!document.getElementById("nprogress-bar")) {
+          var bar = document.createElement("div");
+          bar.id = "nprogress-bar";
+          bar.setAttribute("aria-hidden", "true");
+          document.documentElement.appendChild(bar);
+        }
+      });
+    })();
+  </script>
+  <link rel="stylesheet" href="libs/aos.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "87773c85bb1343d493895be5a89c1f40"}'></script>
+</head>
+<body>
+
+  <header class="site-header">
+    <nav class="nav container">
+      <a href="index.html" class="nav-logo">
+        <img class="logo-dot" src="00.jpg" alt="PaperClip的头像" />PaperClip
+      </a>
+      <div class="nav-right">
+        <ul class="nav-links">
+          <li><a class="nav-link" href="index.html">首页</a></li>
+          <li><a class="nav-link" href="blog.html">博客</a></li>
+          <li><a class="nav-link" href="minecraft.html">Minecraft</a></li>
+          <li><a class="nav-link" href="contact.html">联系我</a></li>
+        </ul>
+        <button class="theme-toggle" id="theme-toggle" aria-label="切换深浅色模式" title="切换深浅色模式">🌞</button>
+        <button class="nav-toggle" aria-label="切换导航菜单">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="swup" class="transition-fade">
+    <section class="container">
+      <nav class="breadcrumb" aria-label="面包屑导航">
+        <a href="index.html">首页</a>
+        <span class="sep">/</span>
+        <span class="current">博客</span>
+      </nav>
+      <div class="page-head" data-aos="fade-up">
+        <h1>博客</h1>
+        <p>记录折腾网页、玩 Minecraft、听终末地的歌，以及学习中的碎碎念。</p>
+      </div>
+
+      <!-- 搜索 + 标签筛选 -->
+      <div class="blog-toolbar" data-aos="fade-up">
+        <input type="search" id="blog-search" class="blog-search" placeholder="搜索文章标题或内容…" aria-label="搜索文章" />
+        <div class="blog-tags" id="blog-tags"></div>
+      </div>
+
+      <!-- 文章列表 -->
+      <div class="blog-list" id="blog-list"></div>
+
+      <!-- 空结果提示 -->
+      <p class="blog-empty" id="blog-empty" hidden>没有找到匹配的文章。</p>
+    </section>
+
+    <!-- 博客：从 posts/ 目录读取 Markdown 文件（放在 #swup 内，Swup 换页时会重放） -->
+    <script>
+    /* 确保 marked.js 已加载（Swup 从其他页面跳转时 #swup 外的脚本不会重新执行） */
+    (function loadMarked() {
+      if (window.marked) return;
+      var s = document.createElement("script");
+      s.src = "libs/marked.min.js";
+      s.async = false;
+      document.head.appendChild(s);
+    })();
+    </script>
+    <script>
+    (function () {
+      "use strict";
+
+      var listEl = document.getElementById("blog-list");
+      var emptyEl = document.getElementById("blog-empty");
+      var tagsEl = document.getElementById("blog-tags");
+      var searchEl = document.getElementById("blog-search");
+
+      var POSTS = [];
+      var activeTag = null;
+      var loaded = false;
+
+      function parseFrontmatter(text) {
+        var match = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/);
+        if (!match) return { meta: {}, body: text };
+        var metaRaw = match[1];
+        var body = match[2];
+        var meta = {};
+        metaRaw.split("\n").forEach(function (line) {
+          var m = line.match(/^([a-zA-Z_]+)\s*:\s*(.*)$/);
+          if (!m) return;
+          var key = m[1].trim();
+          var val = m[2].trim();
+          if (key === "tags") {
+            val = val.replace(/^\[|\]$/g, "").split(",").map(function (s) {
+              return s.trim().replace(/^["']|["']$/g, "");
+            }).filter(Boolean);
+          } else {
+            val = val.replace(/^["']|["']$/g, "");
+          }
+          meta[key] = val;
+        });
+        return { meta: meta, body: body };
+      }
+
+      function escapeHtml(s) {
+        var div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      function collectTags() {
+        var map = {};
+        POSTS.forEach(function (p) {
+          p.tags.forEach(function (t) { map[t] = (map[t] || 0) + 1; });
+        });
+        return Object.keys(map).sort(function (a, b) { return map[b] - map[a]; });
+      }
+
+      function renderTags() {
+        var tags = collectTags();
+        var html = '<button class="blog-tag' + (activeTag === null ? " active" : "") + '" data-tag="">全部</button>';
+        tags.forEach(function (t) {
+          html += '<button class="blog-tag' + (activeTag === t ? " active" : "") + '" data-tag="' + t + '">' + escapeHtml(t) + '</button>';
+        });
+        tagsEl.innerHTML = html;
+        tagsEl.querySelectorAll(".blog-tag").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            activeTag = btn.dataset.tag || null;
+            renderTags();
+            renderList();
+          });
+        });
+      }
+
+      function renderList() {
+        var q = (searchEl.value || "").trim().toLowerCase();
+        var filtered = POSTS.filter(function (p) {
+          var matchTag = activeTag === null || p.tags.indexOf(activeTag) !== -1;
+          if (!matchTag) return false;
+          if (!q) return true;
+          return p.title.toLowerCase().indexOf(q) !== -1 ||
+                 (p.excerpt || "").toLowerCase().indexOf(q) !== -1 ||
+                 (p.bodyPlain || "").toLowerCase().indexOf(q) !== -1;
+        });
+
+        if (!filtered.length) {
+          listEl.innerHTML = "";
+          emptyEl.hidden = false;
+          return;
+        }
+        emptyEl.hidden = true;
+
+        listEl.innerHTML = filtered.map(function (p) {
+          var tagsHtml = p.tags.map(function (t) {
+            return '<span class="post-tag">' + escapeHtml(t) + '</span>';
+          }).join("");
+          var bodyHtml = "";
+          if (window.marked) {
+            try { bodyHtml = marked.parse(p.body); }
+            catch (e) { bodyHtml = "<pre>" + escapeHtml(p.body) + "</pre>"; }
+          } else {
+            bodyHtml = "<pre>" + escapeHtml(p.body) + "</pre>";
+          }
+          return '<article class="post-card" data-aos="fade-up">' +
+            '<header class="post-head">' +
+              '<h2 class="post-title"><button type="button" data-post="' + p.id + '">' + escapeHtml(p.title) + '</button></h2>' +
+              '<div class="post-meta"><time>' + escapeHtml(p.date || "") + '</time><span class="post-tags-inline">' + tagsHtml + '</span></div>' +
+            '</header>' +
+            '<p class="post-excerpt">' + escapeHtml(p.excerpt || "") + '</p>' +
+            '<div class="post-content" id="post-' + p.id + '" hidden>' + bodyHtml + '</div>' +
+            '<footer class="post-foot">' +
+              '<button class="post-toggle" data-post="' + p.id + '">阅读全文 ▾</button>' +
+            '</footer>' +
+          '</article>';
+        }).join("");
+
+        listEl.querySelectorAll(".post-toggle, .post-title button").forEach(function (el) {
+          el.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = el.getAttribute("data-post");
+            var card = document.getElementById("post-" + id);
+            var btn = listEl.querySelector('.post-toggle[data-post="' + id + '"]');
+            if (card.hidden) {
+              card.hidden = false;
+              btn.textContent = "收起 ▴";
+            } else {
+              card.hidden = true;
+              btn.textContent = "阅读全文 ▾";
+            }
+          });
+        });
+
+        if (window.AOS) {
+          try { AOS.refresh(); } catch (e) {}
+        }
+      }
+
+      function loadPosts() {
+        listEl.innerHTML = '<p class="blog-empty">正在加载文章…</p>';
+        fetch("posts/index.json")
+          .then(function (r) {
+            if (!r.ok) throw new Error("index.json 加载失败 (" + r.status + ")");
+            return r.json();
+          })
+          .then(function (files) {
+            if (!Array.isArray(files) || !files.length) throw new Error("文章清单为空");
+            return Promise.all(files.map(function (file) {
+              return fetch("posts/" + file)
+                .then(function (r) {
+                  if (!r.ok) throw new Error(file + " 加载失败 (" + r.status + ")");
+                  return r.text();
+                })
+                .then(function (text) {
+                  var parsed = parseFrontmatter(text);
+                  var id = file.replace(/\.md$/i, "");
+                  return {
+                    id: id,
+                    title: parsed.meta.title || id,
+                    date: parsed.meta.date || "",
+                    tags: Array.isArray(parsed.meta.tags) ? parsed.meta.tags : [],
+                    excerpt: parsed.meta.excerpt || "",
+                    body: parsed.body,
+                    bodyPlain: parsed.body.replace(/[#>*_`~\-]/g, "")
+                  };
+                })
+                .catch(function (e) {
+                  console.error("加载文章失败:", file, e);
+                  return null;
+                });
+            }));
+          })
+          .then(function (results) {
+            POSTS = results.filter(function (p) { return p !== null; });
+            POSTS.sort(function (a, b) {
+              return (b.date || "").localeCompare(a.date || "");
+            });
+            loaded = true;
+            listEl.innerHTML = "";
+            renderTags();
+            renderList();
+          })
+          .catch(function (err) {
+            console.error("博客加载失败:", err);
+            listEl.innerHTML = "";
+            emptyEl.textContent = "文章加载失败：" + err.message;
+            emptyEl.hidden = false;
+          });
+      }
+
+      searchEl.addEventListener("input", function () {
+        if (loaded) renderList();
+      });
+
+      /* 等待 marked.js 加载完毕后再渲染文章（CDN 脚本在页面底部） */
+      function init() {
+        if (window.marked) {
+          loadPosts();
+        } else {
+          setTimeout(init, 50);
+        }
+      }
+      init();
+    })();
+    </script>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <h4>PaperClip</h4>
+          <p>一名在校学生的个人小站，记录学习与折腾。</p>
+        </div>
+        <div>
+          <h4>快速链接</h4>
+          <ul class="footer-links">
+            <li><a href="index.html">首页</a></li>
+            <li><a href="blog.html">博客</a></li>
+            <li><a href="minecraft.html">Minecraft</a></li>
+            <li><a href="contact.html">联系我</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>社交账号</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/TUSI-ISUT" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://space.bilibili.com/3546855067617665" title="BiliBili：Paper_Clip_zero">BiliBili · Paper_Clip_zero</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© <span id="footer-year">2026</span> PaperClip · 保留所有权利 · <a href="https://icp.gov.moe/?keyword=20262701" target="_blank" rel="noopener">萌ICP备20262701号</a> · <span class="site-version"></span></p>
+        <p>本站已运行 <b class="run-days">0</b> 天 · 99% Vibe Coding</p>
+        <p>Designed &amp; Built by PaperClip</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="libs/swup.min.js"></script>
+  <script src="libs/lenis.min.js"></script>
+  <script src="libs/aos.js"></script>
+  <script src="libs/marked.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
