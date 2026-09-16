@@ -18,7 +18,7 @@
    ============================================================ */
 
 /* 站点版本号：发版时只改这里，页脚自动同步显示 */
-const SITE_VERSION = "v0.7.0";
+const SITE_VERSION = "v0.7.1";
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavbar();          // 导航栏相关
@@ -244,7 +244,9 @@ function initBackToTop() {
     if (ticking) return;
     ticking = true;
     requestAnimationFrame(() => {
-      btn.classList.toggle("show", window.scrollY > window.innerHeight * 0.8);
+      const show = window.scrollY > window.innerHeight * 0.8;
+      btn.classList.toggle("show", show);
+      document.body.classList.toggle("has-btt", show);
       ticking = false;
     });
   };

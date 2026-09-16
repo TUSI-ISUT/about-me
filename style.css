@@ -1240,7 +1240,12 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   background: var(--bg-card);
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: var(--transition);
+  transition: var(--transition), bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 回到顶部按钮可见时，播放器上移避让 */
+body.has-btt .music-toggle {
+  bottom: 76px;
 }
 
 .music-toggle:hover {
@@ -1337,7 +1342,12 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   padding: 0;
   font-size: 15px;
   line-height: 1;
-  transition: var(--transition);
+  transition: var(--transition), bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 回到顶部按钮可见时，曲单按钮跟随上移 */
+body.has-btt .music-list-btn {
+  bottom: 134px;
 }
 
 .music-list-btn:hover {
@@ -1615,6 +1625,10 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   object-fit: cover;
   background: var(--bg-card);
   display: block;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.project-card:hover .project-thumb {
+  transform: scale(1.08);
 }
 .project-body { padding: 16px; }
 .project-body h3 { margin: 0 0 6px; font-size: 1.05rem; }
@@ -1653,12 +1667,16 @@ html.no-js [data-aos^="fade"][data-aos^="fade"] {
   transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
 }
+.friend-link:hover .friend-avatar {
+  transform: scale(1.15);
+}
 .friend-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .friend-info { min-width: 0; }
 .friend-info b { display: block; font-size: 0.92rem; }
